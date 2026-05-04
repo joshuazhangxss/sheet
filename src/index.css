@@ -1,0 +1,47 @@
+:root {
+  --background: #f3f4f6;
+  --surface: #ffffff;
+  --surface-muted: #fafbfc;
+  --border: #d9dee5;
+  --text-strong: #14202b;
+  --text-soft: #314254;
+  --text-muted: #667688;
+  --accent: #115c60;
+  --accent-soft: #e9f4f5;
+  --danger: #a33f35;
+  --font-heading: 'Avenir Next', 'Segoe UI Variable', sans-serif;
+  --font-body: 'Avenir Next', 'Segoe UI Variable', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+
+  color: var(--text-soft);
+  font-family: var(--font-body);
+  line-height: 1.45;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--background);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--background);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
