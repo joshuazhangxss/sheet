@@ -335,14 +335,13 @@ function renderYangGroup(group: MakerPrintYangGroup) {
         <div>
           <h3>{group.color}（阳）</h3>
         </div>
-        <div className="maker-print-group-meta">
-          {group.partCount > 1 ? (
+        {group.partCount > 1 ? (
+          <div className="maker-print-group-meta">
             <span className="maker-print-continuation">
               {group.partIndex}/{group.partCount}
             </span>
-          ) : null}
-          <strong>{group.qty}</strong>
-        </div>
+          </div>
+        ) : null}
       </header>
       <div className="maker-print-item-list">
         {group.rows.map((row) => renderPrintCell(row))}
@@ -380,14 +379,13 @@ export function MakerSheetPrintView({
                         <span className="maker-print-color-label">颜色</span>
                         <h2>{column.color}</h2>
                       </div>
-                      <div className="maker-print-group-meta">
-                        {column.partCount > 1 ? (
+                      {column.partCount > 1 ? (
+                        <div className="maker-print-group-meta">
                           <span className="maker-print-continuation">
                             {column.partIndex}/{column.partCount}
                           </span>
-                        ) : null}
-                        <strong>{column.qty}</strong>
-                      </div>
+                        </div>
+                      ) : null}
                     </header>
 
                     {column.sections.map((section) => (

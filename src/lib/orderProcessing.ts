@@ -1141,31 +1141,23 @@ function compareMakerColors(left: string, right: string): number {
   return compareLabels(left, right);
 }
 
-const CIRCLED_NUMBER_MARKERS = [
-  '①',
-  '②',
-  '③',
-  '④',
-  '⑤',
-  '⑥',
-  '⑦',
-  '⑧',
-  '⑨',
-  '⑩',
-  '⑪',
-  '⑫',
-  '⑬',
-  '⑭',
-  '⑮',
-  '⑯',
-  '⑰',
-  '⑱',
-  '⑲',
-  '⑳',
-];
-
 function buildSameOrderMarker(index: number): string {
-  return CIRCLED_NUMBER_MARKERS[index] ?? `[${index + 1}]`;
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+  if (index < alphabet.length) {
+    return `同${alphabet[index]}`;
+  }
+
+  const firstIndex = Math.floor(index / alphabet.length) - 1;
+  const secondIndex = index % alphabet.length;
+  const first = alphabet[firstIndex] ?? '';
+  const second = alphabet[secondIndex] ?? '';
+
+  if (first && second) {
+    return `同${first}${second}`;
+  }
+
+  return `同${index + 1}`;
 }
 
 export function buildMakerRows(rows: MasterRow[]): MakerRow[] {

@@ -597,9 +597,7 @@ function App() {
   const rushCount = masterRows.filter((row) => row.note.includes('★')).length;
   const labelSourceCount = new Set(labelPages.map((page) => page.sourceName)).size;
   const isLabelOrderMode = orderSourceMode === 'labels' && labelMatchedRows.length > 0;
-  const labelMatchedOrderCount = new Set(
-    labelMatchedRows.map((row) => row.amazonOrderId.trim() || row.id),
-  ).size;
+  const hasLabelPages = labelPages.length > 0;
   const viewCounts: Record<ViewMode, number> = {
     raw: baseRows.length,
     filtered: orderSourceRows.length,
@@ -962,25 +960,6 @@ function App() {
     );
   }
 
-  function useLabelMatchesForOrders() {
-    if (labelMatchedRows.length === 0) {
-      setStatusMessage('当前标签还没有匹配到任何订单，无法生成日订单。');
-      return;
-    }
-
-    setOrderSourceMode('labels');
-    setViewMode('daily');
-    setPrimaryViewMode('daily');
-    setStatusMessage(
-      `已按标签匹配结果生成日订单：${labelMatchedOrderCount} 个订单，${labelMatchedRows.length} 条原始行。`,
-    );
-  }
-
-  function returnToFilterOrders() {
-    setOrderSourceMode('filters');
-    setStatusMessage('已切回时间/状态筛选模式。');
-  }
-
   function applyWarehouseDefault() {
     setOrderSourceMode('filters');
     setFilters({
@@ -1162,11 +1141,33 @@ function App() {
       seen.add(key);
       return true;
     });
+    const mergedPages = [...labelPages, ...dedupedPages];
+    const mergedMatches = matchLabelPages(mergedPages, workingRows, allMasterRows);
+    const matchedOrderIds = new Set(
+      mergedMatches
+        .filter((match) => match.status !== 'unmatched' && match.amazonOrderId.trim())
+        .map((match) => match.amazonOrderId.trim()),
+    );
+    const matchedRowCount =
+      matchedOrderIds.size > 0
+        ? workingRows.filter((row) => matchedOrderIds.has(row.amazonOrderId.trim())).length
+        : 0;
 
     setLabelPages((current) => [...current, ...dedupedPages]);
     setLabelWarnings((current) => [...current, ...warnings]);
+
+    if (matchedOrderIds.size > 0) {
+      setOrderSourceMode('labels');
+      setViewMode('maker');
+      setPrimaryViewMode('maker');
+      setStatusMessage(
+        `已导入 ${dedupedPages.length} 页标签 PDF，并自动生成生产单：${matchedOrderIds.size} 个订单，${matchedRowCount} 条原始行。`,
+      );
+      return;
+    }
+
     setStatusMessage(
-      `已导入 ${dedupedPages.length} 页标签 PDF，警告 ${warnings.length} 条。`,
+      `已导入 ${dedupedPages.length} 页标签 PDF，暂时还没有匹配到订单。`,
     );
   }
 
@@ -1698,7 +1699,7 @@ function App() {
             <p className="kicker">订单文件 + 标签 PDF</p>
             <h1>仓库排单</h1>
             <p className="header-text">
-              先导入订单，再上传标签。标签准备好时直接按标签生成批次；没有标签时再用时间筛选。
+              先导入订单，再上传标签。标签准备好时会直接生成生产单；没有标签时再用时间筛选。
             </p>
           </div>
 
@@ -1900,13 +1901,11 @@ function App() {
             onExportBackPdf={() => {
               void exportLabelBacksidePdf();
             }}
-            onUseMatchesForOrders={useLabelMatchesForOrders}
-            onReturnToFilterOrders={returnToFilterOrders}
             isParsing={isParsingLabels}
           />
         ) : null}
 
-        {hasImportedData ? (
+        {hasImportedData && !hasLabelPages ? (
           <section className="section-card">
             <div className="section-head">
               <div>
@@ -1946,19 +1945,6 @@ function App() {
                 </button>
               </div>
             </div>
-
-            {isLabelOrderMode ? (
-              <div className="status-bar">
-                当前批次来自标签匹配，共 {labelMatchedOrderCount} 个订单。
-                <button
-                  type="button"
-                  className="button button-ghost button-inline"
-                  onClick={returnToFilterOrders}
-                >
-                  返回时间筛选
-                </button>
-              </div>
-            ) : null}
 
             {latestImportedDay ? (
               <div className="status-bar">
@@ -2158,14 +2144,15 @@ function App() {
           <section className="section-card">
             <div className="section-head">
               <div>
-                <h2>{primaryViewMode === 'daily' ? '日订单' : '生产单'}</h2>
+                <h2>{isLabelOrderMode || primaryViewMode === 'maker' ? '生产单' : '日订单'}</h2>
                 <p className="section-text">
-                  {isLabelOrderMode ? '当前来源：标签批次。' : '当前来源：时间筛选。'} 时间范围：
-                  {activeDateRangeLabel}
+                  {isLabelOrderMode
+                    ? `当前来源：标签批次，已自动生成生产单。时间范围：${activeDateRangeLabel}`
+                    : `当前来源：时间筛选。时间范围：${activeDateRangeLabel}`}
                 </p>
               </div>
               <div className="section-actions">
-                {primaryViewMode === 'daily' ? (
+                {!isLabelOrderMode && primaryViewMode === 'daily' ? (
                   <button
                     type="button"
                     className="button button-secondary"
@@ -2185,47 +2172,49 @@ function App() {
               </div>
             </div>
 
-            <div className="output-toolbar">
-              <div className="view-tabs">
-                {PRIMARY_VIEW_OPTIONS.map((option) => (
-                  <button
-                    key={option.mode}
-                    type="button"
-                    className={`view-tab ${primaryViewMode === option.mode ? 'is-active' : ''}`}
-                    onClick={() => {
-                      setPrimaryViewMode(option.mode as 'daily' | 'maker');
-                      setViewMode(option.mode);
-                    }}
-                  >
-                    <span>{option.label}</span>
-                    <strong>{viewCounts[option.mode]}</strong>
-                  </button>
-                ))}
-              </div>
-
-              {primaryViewMode === 'daily' ? (
+            {!isLabelOrderMode ? (
+              <div className="output-toolbar">
                 <div className="view-tabs">
-                  <button
-                    type="button"
-                    className={`view-tab ${dailyListMode === 'orders' ? 'is-active' : ''}`}
-                    onClick={() => setDailyListMode('orders')}
-                  >
-                    <span>按订单</span>
-                    <strong>{dailyRows.length}</strong>
-                  </button>
-                  <button
-                    type="button"
-                    className={`view-tab ${dailyListMode === 'colors' ? 'is-active' : ''}`}
-                    onClick={() => setDailyListMode('colors')}
-                  >
-                    <span>按颜色</span>
-                    <strong>{dailyColorGroups.length}</strong>
-                  </button>
+                  {PRIMARY_VIEW_OPTIONS.map((option) => (
+                    <button
+                      key={option.mode}
+                      type="button"
+                      className={`view-tab ${primaryViewMode === option.mode ? 'is-active' : ''}`}
+                      onClick={() => {
+                        setPrimaryViewMode(option.mode as 'daily' | 'maker');
+                        setViewMode(option.mode);
+                      }}
+                    >
+                      <span>{option.label}</span>
+                      <strong>{viewCounts[option.mode]}</strong>
+                    </button>
+                  ))}
                 </div>
-              ) : null}
-            </div>
 
-            {primaryViewMode === 'daily' ? (
+                {primaryViewMode === 'daily' ? (
+                  <div className="view-tabs">
+                    <button
+                      type="button"
+                      className={`view-tab ${dailyListMode === 'orders' ? 'is-active' : ''}`}
+                      onClick={() => setDailyListMode('orders')}
+                    >
+                      <span>按订单</span>
+                      <strong>{dailyRows.length}</strong>
+                    </button>
+                    <button
+                      type="button"
+                      className={`view-tab ${dailyListMode === 'colors' ? 'is-active' : ''}`}
+                      onClick={() => setDailyListMode('colors')}
+                    >
+                      <span>按颜色</span>
+                      <strong>{dailyColorGroups.length}</strong>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {!isLabelOrderMode && primaryViewMode === 'daily' ? (
               dailyListMode === 'orders' ? (
                 <DataTable
                   rows={dailyRows}

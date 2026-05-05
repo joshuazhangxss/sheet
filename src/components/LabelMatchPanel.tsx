@@ -15,8 +15,6 @@ type LabelMatchPanelProps = {
   onClear: () => void;
   onExportCsv: () => void;
   onExportBackPdf: () => void;
-  onUseMatchesForOrders: () => void;
-  onReturnToFilterOrders: () => void;
   isParsing: boolean;
 };
 
@@ -72,8 +70,6 @@ export function LabelMatchPanel({
   onClear,
   onExportCsv,
   onExportBackPdf,
-  onUseMatchesForOrders,
-  onReturnToFilterOrders,
   isParsing,
 }: LabelMatchPanelProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -214,7 +210,7 @@ export function LabelMatchPanel({
         <div>
           <h2>标签批次</h2>
           <p className="section-text">
-            上传 shipping label PDF。系统会先按每个 PDF 自己的顺序匹配，再把这批订单直接送到日订单和生产单。
+            上传 shipping label PDF。系统会先按每个 PDF 自己的顺序匹配，再自动生成这批生产单。
           </p>
         </div>
         <div className="section-actions">
@@ -236,22 +232,6 @@ export function LabelMatchPanel({
           </button>
           <button
             type="button"
-            className="button button-secondary"
-            onClick={onUseMatchesForOrders}
-            disabled={matches.every((match) => match.status === 'unmatched')}
-          >
-            用这批标签生成订单
-          </button>
-          <button
-            type="button"
-            className="button button-ghost"
-            onClick={onReturnToFilterOrders}
-            disabled={!isUsingLabelOrders}
-          >
-            返回时间筛选
-          </button>
-          <button
-            type="button"
             className="button button-primary"
             onClick={onExportBackPdf}
             disabled={matches.length === 0}
@@ -270,7 +250,7 @@ export function LabelMatchPanel({
       </div>
 
       {isUsingLabelOrders ? (
-        <div className="status-bar">当前日订单和生产单正在使用这批标签。</div>
+        <div className="status-bar">这批标签已自动生成生产单。</div>
       ) : null}
 
       <div className="check-grid">

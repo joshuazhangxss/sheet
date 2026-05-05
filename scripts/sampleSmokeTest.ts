@@ -392,6 +392,11 @@ async function main() {
     true,
     'Bundled maker rows should carry a visible same-order marker.',
   );
+  assert.equal(
+    bundledMakerRows.every((row) => row.orderMarker.startsWith('同')),
+    true,
+    'Bundled maker rows should use the worker-facing 同A / 同B style markers.',
+  );
   const bundledPrintMarkup = renderToStaticMarkup(
     React.createElement(MakerSheetPrintView, {
       groups: buildMakerColorGroups(bundledMakerRows),
