@@ -1016,6 +1016,12 @@ textarea:focus,
   background: #fff7e8;
 }
 
+.maker-group-table tbody tr.is-rush .maker-text-input,
+.maker-group-table tbody tr.is-rush .maker-qty-value,
+.maker-group-table tbody tr.is-rush .maker-mark-preview {
+  color: #dc2626;
+}
+
 .maker-group-table td input {
   min-width: 0;
 }
@@ -1050,25 +1056,6 @@ textarea:focus,
 .maker-mark-cell {
   display: grid;
   gap: 6px;
-}
-
-.maker-rush-flag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 32px;
-  min-height: 32px;
-  border-radius: 999px;
-  color: transparent;
-  border: 1px solid transparent;
-}
-
-.maker-rush-flag.is-active {
-  color: #b85b00;
-  background: #ffe7be;
-  border-color: #f0c47c;
-  font-size: 18px;
-  font-weight: 700;
 }
 
 .maker-mark-preview {
@@ -1134,7 +1121,7 @@ textarea:focus,
 
 .maker-print-yang-column {
   display: grid;
-  gap: 0.45mm;
+  gap: 0.72mm;
   align-content: start;
 }
 
@@ -1175,34 +1162,51 @@ textarea:focus,
 }
 
 .maker-print-line-size,
+.maker-print-line-tail,
 .maker-print-line-qty,
 .maker-print-line-type,
-.maker-print-line-order-marker,
-.maker-print-line-star {
+.maker-print-line-order-marker {
   white-space: nowrap;
 }
 
 .maker-print-line-size {
   font-size: 12.8px;
   font-weight: 700;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.maker-print-line-tail {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.08mm;
+  flex: 0 0 auto;
+  margin-left: 0;
+  padding-left: 0.08mm;
+}
+
+.maker-print-line.is-compact {
+  gap: 0.08mm;
+}
+
+.maker-print-line.is-compact .maker-print-line-size {
+  font-size: 11.9px;
+  letter-spacing: -0.025em;
+}
+
+.maker-print-line.is-roomy-triangle .maker-print-line-size {
+  font-size: 12.4px;
+  letter-spacing: -0.018em;
 }
 
 .maker-print-line-qty {
-  font-size: 11.8px;
+  font-size: 12.2px;
   font-weight: 700;
 }
 
 .maker-print-line-type {
-  font-size: 10.8px;
+  font-size: 11.1px;
   font-weight: 700;
-}
-
-.maker-print-line-star {
-  color: #dc2626;
-  font-size: 13.2px;
-  font-weight: 700;
-  line-height: 1;
-  text-shadow: 0 0 0.18mm rgba(220, 38, 38, 0.2);
 }
 
 .maker-print-line-order-marker {
@@ -1217,6 +1221,13 @@ textarea:focus,
 
 .maker-print-detail {
   gap: 0.02mm 0.18mm;
+}
+
+.maker-print-line.is-rush .maker-print-line-size,
+.maker-print-line.is-rush .maker-print-line-qty,
+.maker-print-line.is-rush .maker-print-line-type {
+  color: #dc2626;
+  text-shadow: 0 0 0.18mm rgba(220, 38, 38, 0.16);
 }
 
 .maker-print-mark {
@@ -1331,7 +1342,7 @@ textarea:focus,
     display: grid;
     align-items: start;
     margin-top: 0;
-    gap: 0.25mm;
+    gap: 0.18mm;
   }
 
   body.print-maker-sheet .maker-print-group {
@@ -1344,9 +1355,10 @@ textarea:focus,
 
   body.print-maker-sheet .maker-print-yang-column {
     display: grid;
-    gap: 0.22mm;
+    gap: 0.52mm;
     align-content: start;
-    padding-left: 0.22mm;
+    padding-left: 0.08mm;
+    padding-right: 0.08mm;
     border-left: 1px solid #cbd5e1;
   }
 
@@ -1439,24 +1451,47 @@ textarea:focus,
   }
 
   body.print-maker-sheet .maker-print-line {
-    gap: 0.12mm;
+    gap: 0.1mm;
     min-height: 0;
     line-height: 1.1;
+    min-width: 0;
+    flex-wrap: nowrap;
+  }
+
+  body.print-maker-sheet .maker-print-line-tail {
+    gap: 0.06mm;
+    padding-left: 0.06mm;
   }
 
   body.print-maker-sheet .maker-print-line-size {
-    font-size: 14.1pt;
+    font-size: 14.9pt;
     letter-spacing: -0.01em;
     font-weight: 700;
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  body.print-maker-sheet .maker-print-line.is-compact {
+    gap: 0.06mm;
+  }
+
+  body.print-maker-sheet .maker-print-line.is-compact .maker-print-line-size {
+    font-size: 13.1pt;
+    letter-spacing: -0.03em;
+  }
+
+  body.print-maker-sheet .maker-print-line.is-roomy-triangle .maker-print-line-size {
+    font-size: 14pt;
+    letter-spacing: -0.02em;
   }
 
   body.print-maker-sheet .maker-print-line-qty {
-    font-size: 13.2pt;
+    font-size: 13.8pt;
     font-weight: 700;
   }
 
   body.print-maker-sheet .maker-print-line-type {
-    font-size: 12.3pt;
+    font-size: 12.7pt;
     font-weight: 700;
   }
 
@@ -1465,13 +1500,6 @@ textarea:focus,
     font-weight: 700;
     padding: 0.05mm 0.6mm;
     border-width: 0.18mm;
-  }
-
-  body.print-maker-sheet .maker-print-line-star {
-    color: #dc2626;
-    font-size: 15pt;
-    font-weight: 800;
-    line-height: 1;
   }
 
   body.print-maker-sheet .maker-print-yang-header {

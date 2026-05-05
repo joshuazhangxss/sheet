@@ -393,9 +393,9 @@ async function main() {
     'Bundled maker rows should carry a visible same-order marker.',
   );
   assert.equal(
-    bundledMakerRows.every((row) => row.orderMarker.startsWith('同')),
+    bundledMakerRows.every((row) => /^[A-Z0-9]+$/.test(row.orderMarker)),
     true,
-    'Bundled maker rows should use the worker-facing 同A / 同B style markers.',
+    'Bundled maker rows should use compact worker-facing A / B / C style markers.',
   );
   const bundledPrintMarkup = renderToStaticMarkup(
     React.createElement(MakerSheetPrintView, {
@@ -751,6 +751,32 @@ async function main() {
     countMatches(overflowMarkup, /class="maker-print-page"/g),
     1,
     'A single overflowing color should spill into spare columns on the same page.',
+  );
+
+  const mediumColumnMasterRows = Array.from({ length: 17 }, (_, index) => ({
+    id: `medium-${index}`,
+    sourceRowId: `medium-${index}`,
+    size: `${index + 4}’ X ${index + 9}’`,
+    color: '灰色',
+    qty: 1,
+    note: index % 5 === 0 ? '直' : '',
+    productType: index % 5 === 0 ? '直边' : '弯边',
+    amazonOrderId: `M-${index}`,
+    orderStatus: 'Unshipped',
+    shipServiceLevel: 'Standard',
+    purchaseDate: `2026-04-23T11:${String(index).padStart(2, '0')}`,
+  }));
+  const mediumColumnMarkup = renderToStaticMarkup(
+    React.createElement(MakerSheetPrintView, {
+      groups: buildMakerColorGroups(buildMakerRows(mediumColumnMasterRows)),
+      dateRangeLabel: '2026-04-23 11:00 至 2026-04-23 11:16',
+    }),
+  );
+
+  assert.equal(
+    mediumColumnMarkup.includes('1/2') || mediumColumnMarkup.includes('2/2'),
+    false,
+    'A medium-height color column should use the empty space below before splitting into a continuation column.',
   );
 
   const summaryFallbackRows = [

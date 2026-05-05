@@ -1145,7 +1145,7 @@ function buildSameOrderMarker(index: number): string {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
   if (index < alphabet.length) {
-    return `同${alphabet[index]}`;
+    return alphabet[index];
   }
 
   const firstIndex = Math.floor(index / alphabet.length) - 1;
@@ -1154,10 +1154,10 @@ function buildSameOrderMarker(index: number): string {
   const second = alphabet[secondIndex] ?? '';
 
   if (first && second) {
-    return `同${first}${second}`;
+    return `${first}${second}`;
   }
 
-  return `同${index + 1}`;
+  return `${index + 1}`;
 }
 
 export function buildMakerRows(rows: MasterRow[]): MakerRow[] {

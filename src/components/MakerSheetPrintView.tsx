@@ -50,10 +50,11 @@ type MakerPrintPage = {
   gridTemplateColumns: string;
 };
 
-const MAX_PRINT_COLUMN_UNITS = 14.25;
+const MAX_PRINT_COLUMN_UNITS = 17.2;
 const SECTION_HEADER_UNITS = 0.3;
 const YANG_GROUP_HEADER_UNITS = 0.72;
-const YANG_GROUP_GAP_UNITS = 0.32;
+const YANG_GROUP_GAP_UNITS = 0.5;
+const YANG_COLUMN_WIDTH_WEIGHT = 0.66;
 
 function estimateRowUnits(row: MakerRow): number {
   const contentLength = `${row.size} ${row.productType} ${stripRushNote(row.note)}`.trim().length;
@@ -230,7 +231,7 @@ function packYangGroupsIntoColumns(groups: MakerColorGroup[]): MakerPrintYangCol
       packedColumns.push({
         key: `yang-column-${packedColumns.length + 1}`,
         groups: [segment],
-        widthWeight: 0.96,
+        widthWeight: YANG_COLUMN_WIDTH_WEIGHT,
         usedUnits: segment.units,
       });
       return;
@@ -243,7 +244,7 @@ function packYangGroupsIntoColumns(groups: MakerColorGroup[]): MakerPrintYangCol
   return packedColumns.map((column) => ({
     key: column.key,
     groups: column.groups,
-    widthWeight: 0.96,
+    widthWeight: YANG_COLUMN_WIDTH_WEIGHT,
   }));
 }
 
@@ -287,30 +288,57 @@ function buildWorkerMark(row: MakerRow): string {
     return '';
   }
 
+  if (row.productType === '弯边') {
+    return '';
+  }
+
   return row.productType || '待确认';
+}
+
+function isSingleDigitLeadingDimension(segment: string): boolean {
+  return /^\d(?!\d)/.test(segment.trim());
 }
 
 function renderPrintCell(row: MakerRow) {
   const isRush = hasRushNote(row.note);
   const markLabel = buildWorkerMark(row);
+  const shouldHideCurvedType = row.productType === '弯边' && !isPrivacyFenceType(row.productType);
   const extraType =
     row.productType &&
+    !shouldHideCurvedType &&
     !isPrivacyFenceType(row.productType) &&
     row.productType !== '直边' &&
     row.productType !== markLabel
     ? row.productType
     : '';
   const tailLabel = [markLabel, extraType].filter(Boolean).join(' ');
+  const sizeText = row.size || '待确认';
+  const sizeSegments = sizeText.split(' X ');
+  const sizeSegmentCount = sizeSegments.length;
+  const isCompactLine = sizeSegmentCount >= 3;
+  const isRoomyTriangle =
+    isCompactLine &&
+    isSingleDigitLeadingDimension(sizeSegments[0] ?? '') &&
+    isSingleDigitLeadingDimension(sizeSegments[1] ?? '');
+  const hasTail = Boolean(row.qty > 1 || tailLabel || row.orderMarker);
 
   return (
-    <div key={row.id} className={`maker-print-line ${isRush ? 'is-rush' : ''}`}>
-      <strong className="maker-print-line-size">{row.size || '待确认'}</strong>
-      {row.qty > 1 ? <span className="maker-print-line-qty">={row.qty}</span> : null}
-      {tailLabel ? <span className="maker-print-line-type">{tailLabel}</span> : null}
-      {row.orderMarker ? (
-        <span className="maker-print-line-order-marker">{row.orderMarker}</span>
+    <div
+      key={row.id}
+      className={`maker-print-line ${isRush ? 'is-rush' : ''} ${
+        isCompactLine ? 'is-compact' : ''
+      } ${isRoomyTriangle ? 'is-roomy-triangle' : ''}`}
+    >
+      <strong className="maker-print-line-size">{sizeText}</strong>
+      {hasTail ? (
+        <span className="maker-print-line-tail">
+          {row.qty > 1 ? <span className="maker-print-line-qty">={row.qty}</span> : null}
+          {tailLabel ? <span className="maker-print-line-type">{tailLabel}</span> : null}
+          {row.orderMarker ? (
+            <span className="maker-print-line-order-marker">{row.orderMarker}</span>
+          ) : null}
+        </span>
       ) : null}
-      {isRush ? <span className="maker-print-line-star">★</span> : null}
     </div>
   );
 }

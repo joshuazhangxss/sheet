@@ -44,7 +44,6 @@ function renderSection(
               <th scope="col">尺寸</th>
               <th scope="col">数量</th>
               <th scope="col">标记</th>
-              <th scope="col">加急</th>
               <th scope="col">边型</th>
             </tr>
           </thead>
@@ -75,13 +74,6 @@ function renderSection(
                       aria-label={`${row.color} ${row.size} 的标记`}
                     />
                   </div>
-                </td>
-                <td>
-                  <span
-                    className={`maker-rush-flag ${hasRushNote(row.note) ? 'is-active' : ''}`}
-                  >
-                    {hasRushNote(row.note) ? '★' : ' '}
-                  </span>
                 </td>
                 <td>
                   <input
