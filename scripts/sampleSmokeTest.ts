@@ -5,6 +5,7 @@ import { PDFDocument } from 'pdf-lib';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { LabelMatchPanel } from '../src/components/LabelMatchPanel';
 import { MakerSheetPrintView } from '../src/components/MakerSheetPrintView';
 import {
   buildLabelBackPdf,
@@ -1070,6 +1071,15 @@ async function main() {
       id: 'label-3',
       sourceName: 'labels.pdf',
       pageNumber: 3,
+      text: 'SHIP TO GROMMET ORDER 30303 AMAZON ORDER A-1009',
+      normalizedText: 'SHIP TO GROMMET ORDER 30303 AMAZON ORDER A 1009',
+      width: 288,
+      height: 432,
+    },
+    {
+      id: 'label-4',
+      sourceName: 'labels.pdf',
+      pageNumber: 4,
       text: 'UNKNOWN LABEL WITHOUT ORDER INFORMATION',
       normalizedText: 'UNKNOWN LABEL WITHOUT ORDER INFORMATION',
       width: 288,
@@ -1101,6 +1111,17 @@ async function main() {
       };
     }
 
+    if (row.amazonOrderId === 'A-1009') {
+      return {
+        ...row,
+        original: {
+          ...row.original,
+          'recipient-name': 'Grommet Order',
+          'ship-postal-code': '30303',
+        },
+      };
+    }
+
     return row;
   });
   const shippingMasterRows = buildMasterRows(rowsWithShipping, {});
@@ -1108,11 +1129,38 @@ async function main() {
 
   assert.deepEqual(
     labelMatches.map((match) => match.status),
-    ['matched', 'matched', 'unmatched'],
+    ['matched', 'matched', 'matched', 'unmatched'],
     'Label matching should identify exact order/tracking matches and leave unknown pages unmatched.',
   );
   assert.equal(labelMatches[0]?.amazonOrderId, 'A-1001');
   assert.equal(labelMatches[1]?.amazonOrderId, 'A-1002');
+  assert.equal(labelMatches[2]?.amazonOrderId, 'A-1009');
+  assert.equal(
+    labelMatches[2]?.note,
+    '直+环 ★',
+    'Label matches should carry the extracted straight+grommet note for grommet orders.',
+  );
+
+  const labelMatchPanelMarkup = renderToStaticMarkup(
+    React.createElement(LabelMatchPanel, {
+      orderCount: rowsWithShipping.length,
+      labelPageCount: labelPages.length,
+      sourceCount: 1,
+      warnings: [],
+      matches: labelMatches,
+      orderReviews: buildLabelOrderReviews(rowsWithShipping, shippingMasterRows, labelMatches),
+      isUsingLabelOrders: true,
+      onImport: () => {},
+      onClear: () => {},
+      onExportCsv: () => {},
+      onExportBackPdf: () => {},
+      isParsing: false,
+    }),
+  );
+  expectIncludes(
+    labelMatchPanelMarkup,
+    '直+环',
+  );
 
   const labelOrderReviews = buildLabelOrderReviews(
     rowsWithShipping,
@@ -1290,7 +1338,7 @@ async function main() {
   const backPdfBytes = await buildLabelBackPdf(labelPages, labelMatches, embeddedFontBytes);
   const backPdf = await PDFDocument.load(backPdfBytes);
 
-  assert.equal(backPdf.getPageCount(), 3, 'Back-side PDF should preserve label page order and count.');
+  assert.equal(backPdf.getPageCount(), 4, 'Back-side PDF should preserve label page order and count.');
 
   console.log('Smoke test passed.');
   console.log(`Merged rows: ${merged.rows.length}, filtered rows: ${filteredRows.length}.`);

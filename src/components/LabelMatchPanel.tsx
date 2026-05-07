@@ -1,6 +1,7 @@
 import { useRef, type ChangeEvent } from 'react';
 
 import { DataTable, type TableColumn } from './DataTable';
+import { stripRushNote } from '../lib/orderProcessing';
 import type { LabelMatch, LabelOrderReview } from '../types';
 
 type LabelMatchPanelProps = {
@@ -121,10 +122,10 @@ export function LabelMatchPanel({
       render: (row) => renderSizeBreakdown(row.sizeBreakdown),
     },
     {
-      key: 'productType',
-      label: '类型',
+      key: 'note',
+      label: '标记',
       render: (row) => (
-        <strong>{row.productType || '—'}</strong>
+        <strong>{stripRushNote(row.note) || row.productType || '—'}</strong>
       ),
     },
     {
