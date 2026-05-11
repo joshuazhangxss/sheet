@@ -55,6 +55,23 @@ const SECTION_HEADER_UNITS = 0.3;
 const YANG_GROUP_HEADER_UNITS = 0.72;
 const YANG_GROUP_GAP_UNITS = 0.72;
 const YANG_COLUMN_WIDTH_WEIGHT = 0.66;
+const TRAILING_YANG_COLORS = new Set(['绿色', '黑色']);
+const REGULAR_COLUMNS_PER_PAGE = 5;
+const YANG_COLUMNS_PER_PAGE = 2;
+
+function chunkItems<T>(items: T[], chunkSize: number): T[][] {
+  if (items.length === 0) {
+    return [];
+  }
+
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+
+  return chunks;
+}
 
 function estimateRowUnits(row: MakerRow): number {
   const contentLength = `${row.size} ${row.productType} ${stripRushNote(row.note)}`.trim().length;
@@ -220,9 +237,12 @@ function splitYangColorIntoGroups(group: MakerColorGroup): MakerPrintYangGroup[]
 
 function packYangGroupsIntoColumns(groups: MakerColorGroup[]): MakerPrintYangColumn[] {
   const segments = groups.flatMap((group) => splitYangColorIntoGroups(group));
+  const trailingSegments = segments.filter((segment) => TRAILING_YANG_COLORS.has(segment.color));
+  const standardSegments = segments.filter((segment) => !TRAILING_YANG_COLORS.has(segment.color));
   const packedColumns: Array<MakerPrintYangColumn & { usedUnits: number }> = [];
+  const trailingColumns: Array<MakerPrintYangColumn & { usedUnits: number }> = [];
 
-  segments.forEach((segment) => {
+  standardSegments.forEach((segment) => {
     const targetColumn = packedColumns.find(
       (column) => column.usedUnits + YANG_GROUP_GAP_UNITS + segment.units <= MAX_PRINT_COLUMN_UNITS,
     );
@@ -241,7 +261,26 @@ function packYangGroupsIntoColumns(groups: MakerColorGroup[]): MakerPrintYangCol
     targetColumn.usedUnits += YANG_GROUP_GAP_UNITS + segment.units;
   });
 
-  return packedColumns.map((column) => ({
+  trailingSegments.forEach((segment) => {
+    const targetColumn = trailingColumns.find(
+      (column) => column.usedUnits + YANG_GROUP_GAP_UNITS + segment.units <= MAX_PRINT_COLUMN_UNITS,
+    );
+
+    if (!targetColumn) {
+      trailingColumns.push({
+        key: `yang-column-trailing-${trailingColumns.length + 1}`,
+        groups: [segment],
+        widthWeight: YANG_COLUMN_WIDTH_WEIGHT,
+        usedUnits: segment.units,
+      });
+      return;
+    }
+
+    targetColumn.groups.push(segment);
+    targetColumn.usedUnits += YANG_GROUP_GAP_UNITS + segment.units;
+  });
+
+  return [...packedColumns, ...trailingColumns].map((column) => ({
     key: column.key,
     groups: column.groups,
     widthWeight: YANG_COLUMN_WIDTH_WEIGHT,
@@ -267,14 +306,36 @@ function buildGridTemplate(
 function buildPrintPages(groups: MakerColorGroup[]): MakerPrintPage[] {
   const regularColumns = groups.flatMap((group) => splitRegularColorIntoColumns(group));
   const yangColumns = packYangGroupsIntoColumns(groups);
-  return [
-    {
+  const pages: MakerPrintPage[] = [];
+
+  chunkItems(regularColumns, REGULAR_COLUMNS_PER_PAGE).forEach((regularChunk, index) => {
+    pages.push({
+      key: `regular-page-${index + 1}`,
+      regularColumns: regularChunk,
+      yangColumns: [],
+      gridTemplateColumns: buildGridTemplate(regularChunk, []),
+    });
+  });
+
+  chunkItems(yangColumns, YANG_COLUMNS_PER_PAGE).forEach((yangChunk, index) => {
+    pages.push({
+      key: `yang-page-${index + 1}`,
+      regularColumns: [],
+      yangColumns: yangChunk,
+      gridTemplateColumns: buildGridTemplate([], yangChunk),
+    });
+  });
+
+  if (pages.length === 0) {
+    pages.push({
       key: 'page-1',
-      regularColumns,
-      yangColumns,
-      gridTemplateColumns: buildGridTemplate(regularColumns, yangColumns),
-    },
-  ];
+      regularColumns: [],
+      yangColumns: [],
+      gridTemplateColumns: buildGridTemplate([], []),
+    });
+  }
+
+  return pages;
 }
 
 function buildWorkerMark(row: MakerRow): string {

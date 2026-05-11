@@ -709,8 +709,8 @@ async function main() {
 
   assert.equal(
     countMatches(compactMarkup, /class="maker-print-page"/g),
-    1,
-    'Five-color compact sample should fit into a single print page.',
+    2,
+    'Compact sample should use a regular page and a separate yang page.',
   );
   expectIncludes(compactMarkup, '米色');
   expectIncludes(compactMarkup, '棕色');
@@ -722,6 +722,77 @@ async function main() {
     compactMarkup.includes('=1'),
     false,
     'Print worksheet should omit quantity labels when the quantity is exactly one.',
+  );
+  const trailingYangRows = buildMakerRows([
+    {
+      id: 'yang-brown',
+      sourceRowId: 'yang-brown',
+      size: '3’ X 20’',
+      color: '棕色',
+      qty: 1,
+      note: '阳',
+      productType: '隐私围栏',
+      amazonOrderId: 'Y-1',
+      orderStatus: 'Unshipped',
+      shipServiceLevel: 'Standard',
+      purchaseDate: '2026-04-23T08:50',
+    },
+    {
+      id: 'yang-green',
+      sourceRowId: 'yang-green',
+      size: '6’ X 24’',
+      color: '绿色',
+      qty: 1,
+      note: '阳',
+      productType: '隐私围栏',
+      amazonOrderId: 'Y-2',
+      orderStatus: 'Unshipped',
+      shipServiceLevel: 'Standard',
+      purchaseDate: '2026-04-23T08:51',
+    },
+    {
+      id: 'yang-black',
+      sourceRowId: 'yang-black',
+      size: '8’ X 40’',
+      color: '黑色',
+      qty: 1,
+      note: '阳',
+      productType: '隐私围栏',
+      amazonOrderId: 'Y-3',
+      orderStatus: 'Unshipped',
+      shipServiceLevel: 'Standard',
+      purchaseDate: '2026-04-23T08:52',
+    },
+    {
+      id: 'yang-grey',
+      sourceRowId: 'yang-grey',
+      size: '2’6” X 12’',
+      color: '灰色',
+      qty: 1,
+      note: '阳',
+      productType: '隐私围栏',
+      amazonOrderId: 'Y-4',
+      orderStatus: 'Unshipped',
+      shipServiceLevel: 'Standard',
+      purchaseDate: '2026-04-23T08:53',
+    },
+  ]);
+  const trailingYangMarkup = renderToStaticMarkup(
+    React.createElement(MakerSheetPrintView, {
+      groups: buildMakerColorGroups(trailingYangRows),
+      dateRangeLabel: '2026-04-23 08:50 至 2026-04-23 08:53',
+    }),
+  );
+  const trailingYangColumnStart = trailingYangMarkup.lastIndexOf(
+    '<section class="maker-print-yang-column">',
+  );
+  assert.notEqual(trailingYangColumnStart, -1, 'Expected at least one yang column.');
+  const trailingYangColumn =
+    trailingYangColumnStart >= 0 ? trailingYangMarkup.slice(trailingYangColumnStart) : '';
+  assert.equal(
+    trailingYangColumn.includes('绿色（阳）') && trailingYangColumn.includes('黑色（阳）'),
+    true,
+    'Green and black balcony groups should share the last yang column.',
   );
 
   const overflowMasterRows = Array.from({ length: 42 }, (_, index) => ({

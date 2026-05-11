@@ -1365,6 +1365,11 @@ textarea:focus,
     overflow: hidden;
   }
 
+  body.print-maker-sheet .maker-print-paper:not(:last-child) {
+    break-after: page;
+    page-break-after: always;
+  }
+
   body.print-maker-sheet .maker-print-page {
     display: grid;
     align-items: start;
@@ -1554,6 +1559,42 @@ textarea:focus,
     font-weight: 700;
     padding: 0.05mm 0.6mm;
     border-width: 0.18mm;
+  }
+
+  body.print-maker-sheet .maker-print-group .maker-print-line-size {
+    font-size: 17.1pt;
+  }
+
+  body.print-maker-sheet .maker-print-group .maker-print-line.is-compact .maker-print-line-size {
+    font-size: 15pt;
+  }
+
+  body.print-maker-sheet .maker-print-group .maker-print-line.is-roomy-triangle .maker-print-line-size {
+    font-size: 15.8pt;
+  }
+
+  body.print-maker-sheet .maker-print-group .maker-print-line.is-crowded .maker-print-line-size {
+    font-size: 14.2pt;
+  }
+
+  body.print-maker-sheet .maker-print-group .maker-print-line-qty {
+    font-size: 15.5pt;
+  }
+
+  body.print-maker-sheet .maker-print-group .maker-print-line-type {
+    font-size: 14.3pt;
+  }
+
+  body.print-maker-sheet .maker-print-group .maker-print-line.is-crowded .maker-print-line-qty {
+    font-size: 13.4pt;
+  }
+
+  body.print-maker-sheet .maker-print-group .maker-print-line.is-crowded .maker-print-line-type {
+    font-size: 12.6pt;
+  }
+
+  body.print-maker-sheet .maker-print-group .maker-print-line-order-marker {
+    font-size: 12.2pt;
   }
 
   body.print-maker-sheet .maker-print-yang-header {
