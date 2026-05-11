@@ -1121,7 +1121,7 @@ textarea:focus,
 
 .maker-print-yang-column {
   display: grid;
-  gap: 0.72mm;
+  gap: 0.9mm;
   align-content: start;
 }
 
@@ -1197,6 +1197,33 @@ textarea:focus,
 .maker-print-line.is-roomy-triangle .maker-print-line-size {
   font-size: 12.4px;
   letter-spacing: -0.018em;
+}
+
+.maker-print-line.is-crowded {
+  gap: 0.06mm;
+}
+
+.maker-print-line.is-crowded .maker-print-line-tail {
+  gap: 0.04mm;
+  padding-left: 0.05mm;
+}
+
+.maker-print-line.is-crowded .maker-print-line-size {
+  font-size: 11.6px;
+  letter-spacing: -0.03em;
+}
+
+.maker-print-line.is-crowded .maker-print-line-qty {
+  font-size: 11.7px;
+}
+
+.maker-print-line.is-crowded .maker-print-line-type {
+  font-size: 10.7px;
+}
+
+.maker-print-line.is-crowded .maker-print-line-order-marker {
+  font-size: 10.9px;
+  padding: 0 0.42mm;
 }
 
 .maker-print-line-qty {
@@ -1355,7 +1382,7 @@ textarea:focus,
 
   body.print-maker-sheet .maker-print-yang-column {
     display: grid;
-    gap: 0.52mm;
+    gap: 0.78mm;
     align-content: start;
     padding-left: 0.08mm;
     padding-right: 0.08mm;
@@ -1483,6 +1510,33 @@ textarea:focus,
   body.print-maker-sheet .maker-print-line.is-roomy-triangle .maker-print-line-size {
     font-size: 14pt;
     letter-spacing: -0.02em;
+  }
+
+  body.print-maker-sheet .maker-print-line.is-crowded {
+    gap: 0.04mm;
+  }
+
+  body.print-maker-sheet .maker-print-line.is-crowded .maker-print-line-tail {
+    gap: 0.04mm;
+    padding-left: 0.04mm;
+  }
+
+  body.print-maker-sheet .maker-print-line.is-crowded .maker-print-line-size {
+    font-size: 12.5pt;
+    letter-spacing: -0.035em;
+  }
+
+  body.print-maker-sheet .maker-print-line.is-crowded .maker-print-line-qty {
+    font-size: 12.1pt;
+  }
+
+  body.print-maker-sheet .maker-print-line.is-crowded .maker-print-line-type {
+    font-size: 11.5pt;
+  }
+
+  body.print-maker-sheet .maker-print-line.is-crowded .maker-print-line-order-marker {
+    font-size: 10.4pt;
+    padding: 0.04mm 0.42mm;
   }
 
   body.print-maker-sheet .maker-print-line-qty {

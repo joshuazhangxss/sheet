@@ -50,18 +50,18 @@ type MakerPrintPage = {
   gridTemplateColumns: string;
 };
 
-const MAX_PRINT_COLUMN_UNITS = 17.2;
+const MAX_PRINT_COLUMN_UNITS = 22.6;
 const SECTION_HEADER_UNITS = 0.3;
 const YANG_GROUP_HEADER_UNITS = 0.72;
-const YANG_GROUP_GAP_UNITS = 0.5;
+const YANG_GROUP_GAP_UNITS = 0.72;
 const YANG_COLUMN_WIDTH_WEIGHT = 0.66;
 
 function estimateRowUnits(row: MakerRow): number {
   const contentLength = `${row.size} ${row.productType} ${stripRushNote(row.note)}`.trim().length;
-  const rushUnits = hasRushNote(row.note) ? 0.05 : 0;
-  const overflowUnits = Math.min(0.55, Math.max(0, (contentLength - 18) / 26) * 0.18);
+  const rushUnits = hasRushNote(row.note) ? 0.03 : 0;
+  const overflowUnits = Math.min(0.34, Math.max(0, (contentLength - 20) / 30) * 0.14);
 
-  return 0.82 + rushUnits + overflowUnits;
+  return 0.66 + rushUnits + overflowUnits;
 }
 
 function finalizeColumn(
@@ -316,18 +316,23 @@ function renderPrintCell(row: MakerRow) {
   const sizeSegments = sizeText.split(' X ');
   const sizeSegmentCount = sizeSegments.length;
   const isCompactLine = sizeSegmentCount >= 3;
+  const hasTail = Boolean(row.qty > 1 || tailLabel || row.orderMarker);
+  const isCrowdedLine =
+    hasTail && (sizeText.length >= 13 || sizeSegmentCount >= 3 || Boolean(row.orderMarker));
   const isRoomyTriangle =
     isCompactLine &&
+    !isCrowdedLine &&
     isSingleDigitLeadingDimension(sizeSegments[0] ?? '') &&
     isSingleDigitLeadingDimension(sizeSegments[1] ?? '');
-  const hasTail = Boolean(row.qty > 1 || tailLabel || row.orderMarker);
 
   return (
     <div
       key={row.id}
       className={`maker-print-line ${isRush ? 'is-rush' : ''} ${
         isCompactLine ? 'is-compact' : ''
-      } ${isRoomyTriangle ? 'is-roomy-triangle' : ''}`}
+      } ${isRoomyTriangle ? 'is-roomy-triangle' : ''} ${
+        isCrowdedLine ? 'is-crowded' : ''
+      }`}
     >
       <strong className="maker-print-line-size">{sizeText}</strong>
       {hasTail ? (

@@ -724,7 +724,7 @@ async function main() {
     'Print worksheet should omit quantity labels when the quantity is exactly one.',
   );
 
-  const overflowMasterRows = Array.from({ length: 28 }, (_, index) => ({
+  const overflowMasterRows = Array.from({ length: 42 }, (_, index) => ({
     id: `overflow-${index}`,
     sourceRowId: `overflow-${index}`,
     size: `${index + 4}’ X ${index + 9}’`,
@@ -742,7 +742,7 @@ async function main() {
   const overflowMarkup = renderToStaticMarkup(
     React.createElement(MakerSheetPrintView, {
       groups: overflowGroups,
-      dateRangeLabel: '2026-04-23 10:00 至 2026-04-23 10:27',
+      dateRangeLabel: '2026-04-23 10:00 至 2026-04-23 10:41',
     }),
   );
 
