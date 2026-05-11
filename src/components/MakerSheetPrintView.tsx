@@ -304,22 +304,43 @@ function buildGridTemplate(
 }
 
 function buildPrintPages(groups: MakerColorGroup[]): MakerPrintPage[] {
-  const regularColumns = groups.flatMap((group) => splitRegularColorIntoColumns(group));
-  const yangColumns = packYangGroupsIntoColumns(groups);
   const pages: MakerPrintPage[] = [];
+  const regularColumnsByColor = groups
+    .map((group) => splitRegularColorIntoColumns(group))
+    .filter((columns) => columns.length > 0);
+  const firstRegularColumns = regularColumnsByColor
+    .map((columns) => columns[0])
+    .filter((column): column is MakerPrintColumn => Boolean(column));
+  const overflowRegularColumns = [
+    ...firstRegularColumns.slice(REGULAR_COLUMNS_PER_PAGE),
+    ...regularColumnsByColor.flatMap((columns) => columns.slice(1)),
+  ];
+  const yangColumns = packYangGroupsIntoColumns(groups);
+  const firstPageYangColumns = yangColumns.slice(0, YANG_COLUMNS_PER_PAGE);
+  const overflowYangColumns = yangColumns.slice(YANG_COLUMNS_PER_PAGE);
 
-  chunkItems(regularColumns, REGULAR_COLUMNS_PER_PAGE).forEach((regularChunk, index) => {
+  if (firstRegularColumns.length > 0 || firstPageYangColumns.length > 0) {
+    const pageRegularColumns = firstRegularColumns.slice(0, REGULAR_COLUMNS_PER_PAGE);
     pages.push({
-      key: `regular-page-${index + 1}`,
+      key: 'page-1',
+      regularColumns: pageRegularColumns,
+      yangColumns: firstPageYangColumns,
+      gridTemplateColumns: buildGridTemplate(pageRegularColumns, firstPageYangColumns),
+    });
+  }
+
+  chunkItems(overflowRegularColumns, REGULAR_COLUMNS_PER_PAGE).forEach((regularChunk, index) => {
+    pages.push({
+      key: `regular-page-${index + 2}`,
       regularColumns: regularChunk,
       yangColumns: [],
       gridTemplateColumns: buildGridTemplate(regularChunk, []),
     });
   });
 
-  chunkItems(yangColumns, YANG_COLUMNS_PER_PAGE).forEach((yangChunk, index) => {
+  chunkItems(overflowYangColumns, YANG_COLUMNS_PER_PAGE).forEach((yangChunk, index) => {
     pages.push({
-      key: `yang-page-${index + 1}`,
+      key: `yang-page-${pages.length + index + 1}`,
       regularColumns: [],
       yangColumns: yangChunk,
       gridTemplateColumns: buildGridTemplate([], yangChunk),
@@ -471,7 +492,7 @@ export function MakerSheetPrintView({
                     <header className="maker-print-group-header">
                       <div>
                         <span className="maker-print-color-label">颜色</span>
-                        <h2>{column.color}</h2>
+                        <h2>{column.partCount > 1 && column.partIndex > 1 ? `${column.color}（续）` : column.color}</h2>
                       </div>
                       {column.partCount > 1 ? (
                         <div className="maker-print-group-meta">

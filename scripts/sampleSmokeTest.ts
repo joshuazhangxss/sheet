@@ -709,8 +709,8 @@ async function main() {
 
   assert.equal(
     countMatches(compactMarkup, /class="maker-print-page"/g),
-    2,
-    'Compact sample should use a regular page and a separate yang page.',
+    1,
+    'Compact sample should keep regular columns and yang columns on the first print page.',
   );
   expectIncludes(compactMarkup, '米色');
   expectIncludes(compactMarkup, '棕色');
@@ -819,10 +819,11 @@ async function main() {
 
   expectIncludes(overflowMarkup, '1/2');
   expectIncludes(overflowMarkup, '2/2');
+  expectIncludes(overflowMarkup, '米色（续）');
   assert.equal(
     countMatches(overflowMarkup, /class="maker-print-page"/g),
-    1,
-    'A single overflowing color should spill into spare columns on the same page.',
+    2,
+    'A single overflowing color should continue onto a second print page instead of shrinking the first page.',
   );
 
   const mediumColumnMasterRows = Array.from({ length: 17 }, (_, index) => ({
