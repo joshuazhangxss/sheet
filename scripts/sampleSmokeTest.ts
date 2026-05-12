@@ -817,13 +817,15 @@ async function main() {
     }),
   );
 
-  expectIncludes(overflowMarkup, '1/2');
-  expectIncludes(overflowMarkup, '2/2');
-  expectIncludes(overflowMarkup, '米色（续）');
+  assert.equal(
+    overflowMarkup.includes('1/2') || overflowMarkup.includes('2/2'),
+    false,
+    'Print worksheet should no longer render manual continuation badges for overflowing colors.',
+  );
   assert.equal(
     countMatches(overflowMarkup, /class="maker-print-page"/g),
-    2,
-    'A single overflowing color should continue onto a second print page instead of shrinking the first page.',
+    1,
+    'Print worksheet should render one logical page and let the browser continue overflowing columns naturally.',
   );
 
   const mediumColumnMasterRows = Array.from({ length: 17 }, (_, index) => ({
@@ -851,6 +853,79 @@ async function main() {
     false,
     'A medium-height color column should use the empty space below before splitting into a continuation column.',
   );
+
+  const mixedOverflowMasterRows = [
+    ...Array.from({ length: 42 }, (_, index) => ({
+      id: `mixed-regular-${index}`,
+      sourceRowId: `mixed-regular-${index}`,
+      size: `${index + 4}’ X ${index + 9}’`,
+      color: '米色',
+      qty: 1,
+      note: index % 4 === 0 ? '直 ★' : index % 2 === 0 ? '直' : '',
+      productType: index % 3 === 0 ? '直边' : '弯边',
+      amazonOrderId: `MR-${index}`,
+      orderStatus: 'Unshipped',
+      shipServiceLevel: index % 4 === 0 ? 'Expedited' : 'Standard',
+      purchaseDate: `2026-04-23T12:${String(index).padStart(2, '0')}`,
+    })),
+    ...Array.from({ length: 15 }, (_, index) => ({
+      id: `mixed-yang-brown-${index}`,
+      sourceRowId: `mixed-yang-brown-${index}`,
+      size: `${index + 3}’ X ${index + 8}’`,
+      color: '棕色',
+      qty: 1,
+      note: '阳',
+      productType: '隐私围栏',
+      amazonOrderId: `MYB-${index}`,
+      orderStatus: 'Unshipped',
+      shipServiceLevel: 'Standard',
+      purchaseDate: `2026-04-23T13:${String(index).padStart(2, '0')}`,
+    })),
+    ...Array.from({ length: 15 }, (_, index) => ({
+      id: `mixed-yang-grey-${index}`,
+      sourceRowId: `mixed-yang-grey-${index}`,
+      size: `${index + 5}’ X ${index + 10}’`,
+      color: '灰色',
+      qty: 1,
+      note: '阳',
+      productType: '隐私围栏',
+      amazonOrderId: `MYG-${index}`,
+      orderStatus: 'Unshipped',
+      shipServiceLevel: 'Standard',
+      purchaseDate: `2026-04-23T14:${String(index).padStart(2, '0')}`,
+    })),
+    ...Array.from({ length: 15 }, (_, index) => ({
+      id: `mixed-yang-blue-${index}`,
+      sourceRowId: `mixed-yang-blue-${index}`,
+      size: `${index + 7}’ X ${index + 12}’`,
+      color: '蓝色',
+      qty: 1,
+      note: '阳',
+      productType: '隐私围栏',
+      amazonOrderId: `MYL-${index}`,
+      orderStatus: 'Unshipped',
+      shipServiceLevel: 'Standard',
+      purchaseDate: `2026-04-23T15:${String(index).padStart(2, '0')}`,
+    })),
+  ];
+  const mixedOverflowMarkup = renderToStaticMarkup(
+    React.createElement(MakerSheetPrintView, {
+      groups: buildMakerColorGroups(buildMakerRows(mixedOverflowMasterRows)),
+      dateRangeLabel: '2026-04-23 12:00 至 2026-04-23 15:14',
+    }),
+  );
+
+  assert.equal(
+    countMatches(mixedOverflowMarkup, /class="maker-print-page"/g),
+    1,
+    'Mixed overflow should also stay as one logical print page so the browser can continue onto page two naturally.',
+  );
+  assert.equal(
+    mixedOverflowMarkup.includes('1/2') || mixedOverflowMarkup.includes('2/2'),
+    false,
+    'Mixed overflow should not render manual continuation badges.',
+  );
+  expectIncludes(mixedOverflowMarkup, '蓝色（阳）');
 
   const summaryFallbackRows = [
     {
@@ -1404,6 +1479,107 @@ async function main() {
       },
     ],
     'Sequence fallback should still match known pages even if one summary-page order is missing from the uploaded data.',
+  );
+
+  const weakTextFallbackPages: LabelPage[] = [
+    {
+      id: 'weak-1',
+      sourceName: 'weak.pdf',
+      pageNumber: 1,
+      text: '',
+      normalizedText: '',
+      width: 288,
+      height: 432,
+    },
+    {
+      id: 'weak-2',
+      sourceName: 'weak.pdf',
+      pageNumber: 2,
+      text: '5/10/26, 9:35 PM a',
+      normalizedText: '5 10 26 9 35 PM A',
+      width: 288,
+      height: 432,
+    },
+    {
+      id: 'weak-3',
+      sourceName: 'weak.pdf',
+      pageNumber: 3,
+      text: '',
+      normalizedText: '',
+      width: 288,
+      height: 432,
+    },
+    {
+      id: 'weak-4',
+      sourceName: 'weak.pdf',
+      pageNumber: 4,
+      text: '',
+      normalizedText: '',
+      width: 288,
+      height: 432,
+    },
+    {
+      id: 'weak-5',
+      sourceName: 'weak.pdf',
+      pageNumber: 5,
+      text: 'List of orders with successful label purchase 111-0000001-0000001 111-0000002-0000002',
+      normalizedText:
+        'LIST OF ORDERS WITH SUCCESSFUL LABEL PURCHASE 111 0000001 0000001 111 0000002 0000002',
+      width: 288,
+      height: 432,
+    },
+    {
+      id: 'weak-6',
+      sourceName: 'weak.pdf',
+      pageNumber: 6,
+      text: '111-0000008-0000008',
+      normalizedText: '111 0000008 0000008',
+      width: 288,
+      height: 432,
+    },
+  ];
+  const weakMatchablePages = getMatchableLabelPages(weakTextFallbackPages);
+
+  assert.deepEqual(
+    weakMatchablePages.map((page) => page.pageNumber),
+    [1, 2, 3],
+    'Trailing blank pages immediately before the summary pages should be excluded from matchable label pages.',
+  );
+
+  const weakFallbackMatches = matchLabelPages(
+    weakTextFallbackPages,
+    rowsWithNumericOrders,
+    numericMasterRows,
+  );
+
+  assert.deepEqual(
+    weakFallbackMatches.map((match) => ({
+      pageNumber: match.pageNumber,
+      status: match.status,
+      orderId: match.amazonOrderId,
+      reasons: match.reasons,
+    })),
+    [
+      {
+        pageNumber: 1,
+        status: 'matched',
+        orderId: '111-0000001-0000001',
+        reasons: ['汇总页顺序'],
+      },
+      {
+        pageNumber: 2,
+        status: 'matched',
+        orderId: '111-0000002-0000002',
+        reasons: ['汇总页顺序'],
+      },
+      {
+        pageNumber: 3,
+        status: 'matched',
+        orderId: '111-0000008-0000008',
+        reasons: ['汇总页顺序'],
+      },
+    ],
+    'Weak text pages should still use sequence fallback when the summary-page order is clear.',
   );
 
   const embeddedFontBytes = await readFile('public/fonts/arial-unicode.ttf');

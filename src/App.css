@@ -1332,6 +1332,10 @@ textarea:focus,
     background: white;
   }
 
+  body.print-maker-sheet .tool-tabs {
+    display: none !important;
+  }
+
   body.print-maker-sheet .app-shell {
     display: none !important;
   }
@@ -1355,14 +1359,20 @@ textarea:focus,
   }
 
   body.print-maker-sheet .maker-print-pages {
+    display: block;
     gap: 0;
-    margin-top: 0.45mm;
+    margin-top: 0;
   }
 
   body.print-maker-sheet .maker-print-paper {
+    display: block;
     width: 100%;
-    min-height: calc(100vh - 4mm);
-    overflow: hidden;
+    min-height: 0;
+    overflow: visible;
+    break-inside: auto;
+    page-break-inside: auto;
+    break-before: auto;
+    page-break-before: auto;
   }
 
   body.print-maker-sheet .maker-print-paper:not(:last-child) {
@@ -1373,6 +1383,8 @@ textarea:focus,
   body.print-maker-sheet .maker-print-page {
     display: grid;
     align-items: start;
+    break-inside: auto;
+    page-break-inside: auto;
     margin-top: 0;
     gap: 0.18mm;
   }

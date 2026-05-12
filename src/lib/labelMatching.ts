@@ -43,7 +43,7 @@ const ORDER_LIST_PAGE_PATTERN = /list of orders with successful label purchase/i
 const AMAZON_ORDER_ID_PATTERN = /\b\d{3}-\d{7}-\d{7}\b/g;
 
 const SHIPPING_FIELD_ALIASES = {
-  recipientName: ['recipientname', 'buyername', 'shiptoname', 'shipname'],
+  recipientName: ['recipientname', 'buyername', 'shiptoname', 'shipname', 'customername'],
   postalCode: ['shippostalcode', 'postalcode', 'zipcode', 'zip', 'shipzip'],
   address1: ['shipaddress1', 'addressline1', 'address1', 'shipstreet1'],
   address2: ['shipaddress2', 'addressline2', 'address2', 'shipstreet2'],
@@ -171,13 +171,9 @@ function collectOrderListPages(pages: LabelPage[]): LabelPage[] {
 }
 
 export function getMatchableLabelPages(pages: LabelPage[]): LabelPage[] {
-  const orderListPageIds = new Set(
-    Array.from(groupPagesBySource(pages).values()).flatMap((sourcePages) =>
-      collectOrderListPages(sourcePages).map((page) => page.id),
-    ),
+  return Array.from(groupPagesBySource(pages).values()).flatMap((sourcePages) =>
+    getSequenceLabelPages(sourcePages),
   );
-
-  return pages.filter((page) => !orderListPageIds.has(page.id));
 }
 
 function groupPagesBySource(pages: LabelPage[]): Map<string, LabelPage[]> {
@@ -211,6 +207,41 @@ function collectOrderListPageOrderIds(pages: LabelPage[]): string[] {
     });
 
   return orderedIds;
+}
+
+function getSequenceLabelPages(sourcePages: LabelPage[]): LabelPage[] {
+  const orderListPages = collectOrderListPages(sourcePages);
+  const orderListPageIds = new Set(orderListPages.map((page) => page.id));
+  const orderedLabelPages = sourcePages
+    .filter((page) => !orderListPageIds.has(page.id))
+    .slice()
+    .sort((left, right) => left.pageNumber - right.pageNumber);
+  const fallbackOrderIds = collectOrderListPageOrderIds(orderListPages);
+  const extraPageCount = orderedLabelPages.length - fallbackOrderIds.length;
+
+  if (fallbackOrderIds.length === 0 || extraPageCount <= 0) {
+    return orderedLabelPages;
+  }
+
+  let trimmedCount = 0;
+
+  for (
+    let index = orderedLabelPages.length - 1;
+    index >= 0 && trimmedCount < extraPageCount;
+    index -= 1
+  ) {
+    if (orderedLabelPages[index]?.text.trim()) {
+      break;
+    }
+
+    trimmedCount += 1;
+  }
+
+  if (trimmedCount !== extraPageCount) {
+    return orderedLabelPages;
+  }
+
+  return orderedLabelPages.slice(0, orderedLabelPages.length - trimmedCount);
 }
 
 function buildCandidates(filteredRows: OrderRow[], masterRows: MasterRow[]): LabelOrderCandidate[] {
@@ -426,6 +457,20 @@ function buildLabelSnippet(text: string): string {
   return text.replace(/\s+/g, ' ').trim().slice(0, 120);
 }
 
+function hasWeakLabelText(text: string): boolean {
+  const normalized = normalizeMatchText(text);
+
+  if (!normalized) {
+    return true;
+  }
+
+  if (extractAmazonOrderIds(text).length > 0) {
+    return false;
+  }
+
+  return tokenizeMatchText(text).length === 0 && normalized.length < 24;
+}
+
 function buildUnmatched(page: LabelPage): LabelMatch {
   return {
     id: page.id,
@@ -510,8 +555,7 @@ export function matchLabelPages(
 
   groupPagesBySource(pages).forEach((sourcePages) => {
     const sourceOrderListPages = collectOrderListPages(sourcePages);
-    const sourceOrderListPageIds = new Set(sourceOrderListPages.map((page) => page.id));
-    const sourceLabelPages = sourcePages.filter((page) => !sourceOrderListPageIds.has(page.id));
+    const sourceLabelPages = getSequenceLabelPages(sourcePages);
     const fallbackOrderIds = collectOrderListPageOrderIds(sourceOrderListPages);
     const canUseSequenceFallback =
       fallbackOrderIds.length > 0 && fallbackOrderIds.length === sourceLabelPages.length;
@@ -538,7 +582,7 @@ export function matchLabelPages(
     const fallbackCandidate = fallbackAssignments.get(page.id);
     const fallbackOrderId = fallbackOrderIdsByPageId.get(page.id) ?? '';
 
-    if (fallbackCandidate && !page.text.trim()) {
+    if (fallbackCandidate && (!page.text.trim() || hasWeakLabelText(page.text))) {
       return {
         id: page.id,
         pageId: page.id,
@@ -562,7 +606,7 @@ export function matchLabelPages(
       };
     }
 
-    if (fallbackOrderId && !page.text.trim()) {
+    if (fallbackOrderId && (!page.text.trim() || hasWeakLabelText(page.text))) {
       return buildOrderAwareUnmatched(page, fallbackOrderId, ['汇总页顺序', '订单数据缺失']);
     }
 

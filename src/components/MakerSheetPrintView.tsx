@@ -22,8 +22,6 @@ type MakerPrintColumn = {
   color: string;
   qty: number;
   sections: MakerPrintSection[];
-  partIndex: number;
-  partCount: number;
   widthWeight: number;
 };
 
@@ -32,9 +30,6 @@ type MakerPrintYangGroup = {
   color: string;
   qty: number;
   rows: MakerRow[];
-  partIndex: number;
-  partCount: number;
-  units: number;
 };
 
 type MakerPrintYangColumn = {
@@ -50,42 +45,21 @@ type MakerPrintPage = {
   gridTemplateColumns: string;
 };
 
-const MAX_PRINT_COLUMN_UNITS = 22.6;
-const SECTION_HEADER_UNITS = 0.3;
-const YANG_GROUP_HEADER_UNITS = 0.72;
-const YANG_GROUP_GAP_UNITS = 0.72;
 const YANG_COLUMN_WIDTH_WEIGHT = 0.66;
 const TRAILING_YANG_COLORS = new Set(['绿色', '黑色']);
-const REGULAR_COLUMNS_PER_PAGE = 5;
-const YANG_COLUMNS_PER_PAGE = 2;
+function buildRegularColorColumn(group: MakerColorGroup): MakerPrintColumn | null {
+  const regularRows = group.rows.filter((row) => !isPrivacyFenceType(row.productType));
 
-function chunkItems<T>(items: T[], chunkSize: number): T[][] {
-  if (items.length === 0) {
-    return [];
+  if (regularRows.length === 0) {
+    return null;
   }
 
-  const chunks: T[][] = [];
-
-  for (let index = 0; index < items.length; index += chunkSize) {
-    chunks.push(items.slice(index, index + chunkSize));
-  }
-
-  return chunks;
-}
-
-function estimateRowUnits(row: MakerRow): number {
-  const contentLength = `${row.size} ${row.productType} ${stripRushNote(row.note)}`.trim().length;
-  const rushUnits = hasRushNote(row.note) ? 0.03 : 0;
-  const overflowUnits = Math.min(0.34, Math.max(0, (contentLength - 20) / 30) * 0.14);
-
-  return 0.66 + rushUnits + overflowUnits;
-}
-
-function finalizeColumn(
-  color: string,
-  partIndex: number,
-  sections: MakerPrintSection[],
-): MakerPrintColumn {
+  const sections: MakerPrintSection[] = [
+    {
+      title: '常规',
+      rows: regularRows,
+    },
+  ];
   const totalQty = sections.reduce(
     (sum, section) => sum + section.rows.reduce((sectionSum, row) => sectionSum + row.qty, 0),
     0,
@@ -93,198 +67,54 @@ function finalizeColumn(
   const rowCount = sections.reduce((sum, section) => sum + section.rows.length, 0);
 
   return {
-    key: `${color}-${partIndex}`,
-    color,
+    key: `${group.color}-1`,
+    color: group.color,
     qty: totalQty,
     sections,
-    partIndex,
-    partCount: 0,
     widthWeight: totalQty <= 2 || rowCount <= 2 ? 0.72 : totalQty <= 4 ? 0.82 : 0.96,
   };
 }
 
-function splitRegularColorIntoColumns(group: MakerColorGroup): MakerPrintColumn[] {
-  const regularRows = group.rows.filter((row) => !isPrivacyFenceType(row.productType));
-
-  if (regularRows.length === 0) {
-    return [];
-  }
-
-  const columns: MakerPrintColumn[] = [];
-  let currentSections: MakerPrintSection[] = [];
-  let currentUnits = 0;
-  let partIndex = 1;
-  const rowBlocks = regularRows.reduce<MakerRow[][]>((blocks, row) => {
-    const previousBlock = blocks.at(-1);
-
-    if (
-      row.orderMarker &&
-      previousBlock &&
-      previousBlock[0]?.orderMarker === row.orderMarker
-    ) {
-      previousBlock.push(row);
-      return blocks;
-    }
-
-    blocks.push([row]);
-    return blocks;
-  }, []);
-
-  const pushCurrentColumn = () => {
-    if (currentSections.length === 0) {
-      return;
-    }
-
-    columns.push(finalizeColumn(group.color, partIndex, currentSections));
-    currentSections = [];
-    currentUnits = 0;
-    partIndex += 1;
-  };
-
-  rowBlocks.forEach((block) => {
-    const activeSection = currentSections.at(-1);
-    const isNewSection = activeSection?.title !== '常规';
-    const sectionUnits = isNewSection ? SECTION_HEADER_UNITS : 0;
-    const blockUnits = block.reduce((sum, row) => sum + estimateRowUnits(row), 0);
-
-    if (
-      currentSections.length > 0 &&
-      currentUnits + sectionUnits + blockUnits > MAX_PRINT_COLUMN_UNITS
-    ) {
-      pushCurrentColumn();
-    }
-
-    const nextSection = currentSections.at(-1);
-
-    if (nextSection?.title !== '常规') {
-      currentSections.push({
-        title: '常规',
-        rows: [...block],
-      });
-      currentUnits += SECTION_HEADER_UNITS + blockUnits;
-      return;
-    }
-
-    nextSection.rows.push(...block);
-    currentUnits += blockUnits;
-  });
-
-  pushCurrentColumn();
-
-  return columns.map((column) => ({
-    ...column,
-    partCount: columns.length,
-  }));
-}
-
-function estimateYangGroupUnits(rows: MakerRow[]): number {
-  return (
-    rows.reduce((sum, row) => sum + estimateRowUnits(row) + 0.08, 0) + YANG_GROUP_HEADER_UNITS
-  );
-}
-
-function splitYangColorIntoGroups(group: MakerColorGroup): MakerPrintYangGroup[] {
+function buildYangColorGroup(group: MakerColorGroup): MakerPrintYangGroup | null {
   const privacyRows = group.rows.filter((row) => isPrivacyFenceType(row.productType));
 
   if (privacyRows.length === 0) {
-    return [];
+    return null;
   }
 
-  const groupsByPart: MakerPrintYangGroup[] = [];
-  let currentRows: MakerRow[] = [];
-  let currentUnits = 0;
-  let partIndex = 1;
-
-  const pushCurrentGroup = () => {
-    if (currentRows.length === 0) {
-      return;
-    }
-
-    groupsByPart.push({
-      key: `${group.color}-yang-${partIndex}`,
-      color: group.color,
-      qty: currentRows.reduce((sum, row) => sum + row.qty, 0),
-      rows: currentRows,
-      partIndex,
-      partCount: 0,
-      units: estimateYangGroupUnits(currentRows),
-    });
-    currentRows = [];
-    currentUnits = 0;
-    partIndex += 1;
+  return {
+    key: `${group.color}-yang`,
+    color: group.color,
+    qty: privacyRows.reduce((sum, row) => sum + row.qty, 0),
+    rows: privacyRows,
   };
-
-  privacyRows.forEach((row) => {
-    const rowUnits = estimateRowUnits(row) + 0.08;
-    const nextUnits = currentRows.length === 0 ? YANG_GROUP_HEADER_UNITS + rowUnits : currentUnits + rowUnits;
-
-    if (currentRows.length > 0 && nextUnits > MAX_PRINT_COLUMN_UNITS) {
-      pushCurrentGroup();
-    }
-
-    currentRows.push(row);
-    currentUnits =
-      currentRows.length === 1 ? YANG_GROUP_HEADER_UNITS + rowUnits : currentUnits + rowUnits;
-  });
-
-  pushCurrentGroup();
-
-  return groupsByPart.map((yangGroup) => ({
-    ...yangGroup,
-    partCount: groupsByPart.length,
-  }));
 }
 
 function packYangGroupsIntoColumns(groups: MakerColorGroup[]): MakerPrintYangColumn[] {
-  const segments = groups.flatMap((group) => splitYangColorIntoGroups(group));
+  const segments = groups
+    .map((group) => buildYangColorGroup(group))
+    .filter((group): group is MakerPrintYangGroup => Boolean(group));
   const trailingSegments = segments.filter((segment) => TRAILING_YANG_COLORS.has(segment.color));
   const standardSegments = segments.filter((segment) => !TRAILING_YANG_COLORS.has(segment.color));
-  const packedColumns: Array<MakerPrintYangColumn & { usedUnits: number }> = [];
-  const trailingColumns: Array<MakerPrintYangColumn & { usedUnits: number }> = [];
+  const columns: MakerPrintYangColumn[] = [];
 
-  standardSegments.forEach((segment) => {
-    const targetColumn = packedColumns.find(
-      (column) => column.usedUnits + YANG_GROUP_GAP_UNITS + segment.units <= MAX_PRINT_COLUMN_UNITS,
-    );
+  if (standardSegments.length > 0) {
+    columns.push({
+      key: 'yang-column-1',
+      groups: standardSegments,
+      widthWeight: YANG_COLUMN_WIDTH_WEIGHT,
+    });
+  }
 
-    if (!targetColumn) {
-      packedColumns.push({
-        key: `yang-column-${packedColumns.length + 1}`,
-        groups: [segment],
-        widthWeight: YANG_COLUMN_WIDTH_WEIGHT,
-        usedUnits: segment.units,
-      });
-      return;
-    }
+  if (trailingSegments.length > 0) {
+    columns.push({
+      key: 'yang-column-trailing',
+      groups: trailingSegments,
+      widthWeight: YANG_COLUMN_WIDTH_WEIGHT,
+    });
+  }
 
-    targetColumn.groups.push(segment);
-    targetColumn.usedUnits += YANG_GROUP_GAP_UNITS + segment.units;
-  });
-
-  trailingSegments.forEach((segment) => {
-    const targetColumn = trailingColumns.find(
-      (column) => column.usedUnits + YANG_GROUP_GAP_UNITS + segment.units <= MAX_PRINT_COLUMN_UNITS,
-    );
-
-    if (!targetColumn) {
-      trailingColumns.push({
-        key: `yang-column-trailing-${trailingColumns.length + 1}`,
-        groups: [segment],
-        widthWeight: YANG_COLUMN_WIDTH_WEIGHT,
-        usedUnits: segment.units,
-      });
-      return;
-    }
-
-    targetColumn.groups.push(segment);
-    targetColumn.usedUnits += YANG_GROUP_GAP_UNITS + segment.units;
-  });
-
-  return [...packedColumns, ...trailingColumns].map((column) => ({
-    key: column.key,
-    groups: column.groups,
-    widthWeight: YANG_COLUMN_WIDTH_WEIGHT,
-  }));
+  return columns;
 }
 
 function buildGridTemplate(
@@ -304,59 +134,19 @@ function buildGridTemplate(
 }
 
 function buildPrintPages(groups: MakerColorGroup[]): MakerPrintPage[] {
-  const pages: MakerPrintPage[] = [];
-  const regularColumnsByColor = groups
-    .map((group) => splitRegularColorIntoColumns(group))
-    .filter((columns) => columns.length > 0);
-  const firstRegularColumns = regularColumnsByColor
-    .map((columns) => columns[0])
+  const regularColumns = groups
+    .map((group) => buildRegularColorColumn(group))
     .filter((column): column is MakerPrintColumn => Boolean(column));
-  const overflowRegularColumns = [
-    ...firstRegularColumns.slice(REGULAR_COLUMNS_PER_PAGE),
-    ...regularColumnsByColor.flatMap((columns) => columns.slice(1)),
-  ];
   const yangColumns = packYangGroupsIntoColumns(groups);
-  const firstPageYangColumns = yangColumns.slice(0, YANG_COLUMNS_PER_PAGE);
-  const overflowYangColumns = yangColumns.slice(YANG_COLUMNS_PER_PAGE);
 
-  if (firstRegularColumns.length > 0 || firstPageYangColumns.length > 0) {
-    const pageRegularColumns = firstRegularColumns.slice(0, REGULAR_COLUMNS_PER_PAGE);
-    pages.push({
+  return [
+    {
       key: 'page-1',
-      regularColumns: pageRegularColumns,
-      yangColumns: firstPageYangColumns,
-      gridTemplateColumns: buildGridTemplate(pageRegularColumns, firstPageYangColumns),
-    });
-  }
-
-  chunkItems(overflowRegularColumns, REGULAR_COLUMNS_PER_PAGE).forEach((regularChunk, index) => {
-    pages.push({
-      key: `regular-page-${index + 2}`,
-      regularColumns: regularChunk,
-      yangColumns: [],
-      gridTemplateColumns: buildGridTemplate(regularChunk, []),
-    });
-  });
-
-  chunkItems(overflowYangColumns, YANG_COLUMNS_PER_PAGE).forEach((yangChunk, index) => {
-    pages.push({
-      key: `yang-page-${pages.length + index + 1}`,
-      regularColumns: [],
-      yangColumns: yangChunk,
-      gridTemplateColumns: buildGridTemplate([], yangChunk),
-    });
-  });
-
-  if (pages.length === 0) {
-    pages.push({
-      key: 'page-1',
-      regularColumns: [],
-      yangColumns: [],
-      gridTemplateColumns: buildGridTemplate([], []),
-    });
-  }
-
-  return pages;
+      regularColumns,
+      yangColumns,
+      gridTemplateColumns: buildGridTemplate(regularColumns, yangColumns),
+    },
+  ];
 }
 
 function buildWorkerMark(row: MakerRow): string {
@@ -450,13 +240,6 @@ function renderYangGroup(group: MakerPrintYangGroup) {
         <div>
           <h3>{group.color}（阳）</h3>
         </div>
-        {group.partCount > 1 ? (
-          <div className="maker-print-group-meta">
-            <span className="maker-print-continuation">
-              {group.partIndex}/{group.partCount}
-            </span>
-          </div>
-        ) : null}
       </header>
       <div className="maker-print-item-list">
         {group.rows.map((row) => renderPrintCell(row))}
@@ -473,11 +256,12 @@ export function MakerSheetPrintView({
 
   return (
     <div className="maker-print-root">
-      {dateRangeLabel ? <header className="maker-print-header">{dateRangeLabel}</header> : null}
-
       <div className="maker-print-pages">
-        {pages.map((page) => (
+        {pages.map((page, index) => (
           <section key={page.key} className="maker-print-paper">
+            {index === 0 && dateRangeLabel ? (
+              <header className="maker-print-header">{dateRangeLabel}</header>
+            ) : null}
             <div className="maker-print-fit">
               <section
                 className="maker-print-page"
@@ -492,15 +276,8 @@ export function MakerSheetPrintView({
                     <header className="maker-print-group-header">
                       <div>
                         <span className="maker-print-color-label">颜色</span>
-                        <h2>{column.partCount > 1 && column.partIndex > 1 ? `${column.color}（续）` : column.color}</h2>
+                        <h2>{column.color}</h2>
                       </div>
-                      {column.partCount > 1 ? (
-                        <div className="maker-print-group-meta">
-                          <span className="maker-print-continuation">
-                            {column.partIndex}/{column.partCount}
-                          </span>
-                        </div>
-                      ) : null}
                     </header>
 
                     {column.sections.map((section) => (

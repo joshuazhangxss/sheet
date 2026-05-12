@@ -46,6 +46,7 @@ import {
   sortOrderRowsForReview,
   stripRushNote,
 } from './lib/orderProcessing';
+import { parseHomaExcel } from './lib/homaProcessing';
 import type {
   DailyColorGroup,
   FilterPreset,
@@ -60,6 +61,7 @@ import type {
   ProductionOverride,
   RawEditMap,
   ViewMode,
+  ParsedImport,
 } from './types';
 
 const PRESET_STORAGE_KEY = 'warehouse-order-presets-v1';
@@ -469,6 +471,10 @@ function downloadPdf(filename: string, bytes: Uint8Array) {
   URL.revokeObjectURL(url);
 }
 
+function isHomaExcelFile(file: File): boolean {
+  return /\.xlsx?$/i.test(file.name);
+}
+
 function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const printCleanupRef = useRef<null | (() => void)>(null);
@@ -495,7 +501,7 @@ function App() {
   const [labelWarnings, setLabelWarnings] = useState<string[]>([]);
   const [isParsingLabels, setIsParsingLabels] = useState(false);
   const [statusMessage, setStatusMessage] = useState(
-    '请先上传 Amazon CSV/TXT 文件，或直接粘贴表格文本。',
+    '请先上传 Amazon CSV/TXT 或 HOMA Excel 文件；也可以直接粘贴 Amazon 表格文本。',
   );
 
   useEffect(() => {
@@ -1037,20 +1043,13 @@ function App() {
     });
   }
 
-  function appendImports(
-    nextRows: OrderRow[],
-    nextHeaders: string[],
-    warnings: string[],
+  function appendParsedImports(
+    parsedImports: ParsedImport[],
     sourceCount: number,
   ) {
-    const merged = mergeImportedData(baseRows, rawHeaders, [
-      {
-        sourceName: sourceCount === 1 ? 'import' : 'imports',
-        rows: nextRows,
-        headers: nextHeaders,
-        warnings,
-      },
-    ]);
+    const warnings = parsedImports.flatMap((item) => item.warnings);
+
+    const merged = mergeImportedData(baseRows, rawHeaders, parsedImports);
     const addedCount = merged.rows.length - baseRows.length;
     const warningSuffix =
       warnings.length > 0
@@ -1095,11 +1094,14 @@ function App() {
     }
 
     const parsedImports = await Promise.all(
-      files.map(async (file) => parseAmazonText(await file.text(), file.name)),
+      files.map(async (file) =>
+        isHomaExcelFile(file)
+          ? parseHomaExcel(file)
+          : parseAmazonText(await file.text(), file.name),
+      ),
     );
 
     const nextRows = parsedImports.flatMap((item) => item.rows);
-    const nextHeaders = parsedImports.flatMap((item) => item.headers);
     const warnings = parsedImports.flatMap((item) => item.warnings);
 
     if (nextRows.length === 0) {
@@ -1107,7 +1109,7 @@ function App() {
       return;
     }
 
-    appendImports(nextRows, nextHeaders, warnings, files.length);
+    appendParsedImports(parsedImports, files.length);
   }
 
   async function importPastedText() {
@@ -1123,7 +1125,7 @@ function App() {
       return;
     }
 
-    appendImports(parsed.rows, parsed.headers, parsed.warnings, 1);
+    appendParsedImports([parsed], 1);
     setPasteText('');
   }
 
@@ -1576,26 +1578,38 @@ function App() {
         return;
       }
 
-      const paper = printRoot.querySelector<HTMLElement>('.maker-print-paper');
-      const fit = printRoot.querySelector<HTMLElement>('.maker-print-fit');
+      const papers = Array.from(
+        printRoot.querySelectorAll<HTMLElement>('.maker-print-paper'),
+      );
 
-      if (!paper || !fit) {
+      if (papers.length > 1) {
+        papers.forEach((paper) => {
+          paper.style.setProperty('--maker-print-scale', '1');
+        });
         return;
       }
 
-      printRoot.style.setProperty('--maker-print-scale', '1');
+      papers.forEach((paper) => {
+        const fit = paper.querySelector<HTMLElement>('.maker-print-fit');
 
-      const paperWidth = paper.clientWidth;
-      const paperHeight = paper.clientHeight;
-      const contentWidth = fit.scrollWidth;
-      const contentHeight = fit.scrollHeight;
+        if (!fit) {
+          return;
+        }
 
-      if (paperWidth <= 0 || paperHeight <= 0 || contentWidth <= 0 || contentHeight <= 0) {
-        return;
-      }
+        paper.style.setProperty('--maker-print-scale', '1');
 
-      const nextScale = Math.min(1, paperWidth / contentWidth, paperHeight / contentHeight);
-      printRoot.style.setProperty('--maker-print-scale', `${Math.max(nextScale, 0.45)}`);
+        const paperWidth = paper.clientWidth;
+        const paperHeight = paper.clientHeight;
+        const contentWidth = fit.scrollWidth;
+        const contentHeight = fit.scrollHeight;
+
+        if (paperWidth <= 0 || paperHeight <= 0 || contentWidth <= 0 || contentHeight <= 0) {
+          return;
+        }
+
+        const nextScale = Math.min(1, paperWidth / contentWidth, paperHeight / contentHeight);
+        paper.style.setProperty('--maker-print-scale', `${Math.max(nextScale, 0.45)}`);
+      });
     };
 
     const cleanup = () => {
@@ -1609,7 +1623,9 @@ function App() {
       window.clearTimeout(fallbackTimer);
       window.removeEventListener('afterprint', cleanup);
       document.body.classList.remove(printClassName);
-      printRoot?.style.removeProperty('--maker-print-scale');
+      printRoot
+        ?.querySelectorAll<HTMLElement>('.maker-print-paper')
+        .forEach((paper) => paper.style.removeProperty('--maker-print-scale'));
       printCleanupRef.current = null;
 
     };
@@ -1694,81 +1710,81 @@ function App() {
   return (
     <>
       <div className="app-shell">
-        <header className="app-header">
-          <div className="header-copy">
-            <p className="kicker">订单文件 + 标签 PDF</p>
-            <h1>仓库排单</h1>
-            <p className="header-text">
-              先导入订单，再上传标签。标签准备好时会直接生成生产单；没有标签时再用时间筛选。
-            </p>
-          </div>
+            <header className="app-header">
+              <div className="header-copy">
+                <p className="kicker">Amazon / HOMA 订单文件 + 标签 PDF</p>
+                <h1>仓库排单</h1>
+                <p className="header-text">
+                  Amazon CSV/TXT 和 HOMA Excel 都可以导入到同一个订单库。上传标签后会直接生成生产单；没有标签时再用时间筛选。
+                </p>
+              </div>
 
-          {hasImportedData ? (
-            <div className="metric-row">
-              <div className="metric-card">
-                <span>订单库</span>
-                <strong>{matchableOrderCount}</strong>
-              </div>
-              <div className="metric-card">
-                <span>标签页</span>
-                <strong>{matchableLabelPages.length}</strong>
-              </div>
-              <div className="metric-card">
-                <span>当前批次</span>
-                <strong>{dailyRows.length}</strong>
-              </div>
-              <div className="metric-card">
-                <span>生产单 / 加急</span>
-                <strong>
-                  {makerRows.length} / {rushCount}
-                </strong>
-              </div>
-            </div>
-          ) : (
-            <div className="start-note">
-              先导入 Amazon 订单文件。导入后可以直接上传标签 PDF 生成今日批次。
-            </div>
-          )}
-        </header>
+              {hasImportedData ? (
+                <div className="metric-row">
+                  <div className="metric-card">
+                    <span>订单库</span>
+                    <strong>{matchableOrderCount}</strong>
+                  </div>
+                  <div className="metric-card">
+                    <span>标签页</span>
+                    <strong>{matchableLabelPages.length}</strong>
+                  </div>
+                  <div className="metric-card">
+                    <span>当前批次</span>
+                    <strong>{dailyRows.length}</strong>
+                  </div>
+                  <div className="metric-card">
+                    <span>生产单 / 加急</span>
+                    <strong>
+                      {makerRows.length} / {rushCount}
+                    </strong>
+                  </div>
+                </div>
+              ) : (
+                <div className="start-note">
+                  先导入 Amazon 或 HOMA 订单文件。导入后可以直接上传标签 PDF 生成今日批次。
+                </div>
+              )}
+            </header>
 
-        <section className="section-card">
-          <div className="section-head">
-            <div>
-              <h2>导入订单</h2>
-              <p className="section-text">支持多个 Amazon CSV/TXT，也支持直接粘贴表格文本。</p>
-            </div>
-            <div className="section-actions">
-              <button
-                type="button"
-                className="button button-secondary"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                选择文件
-              </button>
-              <button
-                type="button"
-                className="button button-ghost"
-                onClick={clearAllData}
-                disabled={baseRows.length === 0 && !pasteText}
-              >
-                全部清空
-              </button>
-            </div>
-          </div>
+            <section className="section-card">
+              <div className="section-head">
+                <div>
+                  <h2>导入订单</h2>
+                  <p className="section-text">支持多个 Amazon CSV/TXT、HOMA Excel，也支持直接粘贴 Amazon 表格文本。</p>
+                </div>
+                <div className="section-actions">
+                  <button
+                    type="button"
+                    className="button button-secondary"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    选择文件
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-ghost"
+                    onClick={clearAllData}
+                    disabled={baseRows.length === 0 && !pasteText}
+                  >
+                    全部清空
+                  </button>
+                </div>
+              </div>
 
-          <div className="import-grid">
-            <div
+              <div className="import-grid">
+                <div
               className={`dropzone ${isDragging ? 'is-dragging' : ''}`}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
             >
               <strong>拖入订单文件</strong>
-              <span>支持多个 Amazon 订单 CSV 或 TXT 文件。</span>
+              <span>支持 Amazon CSV/TXT，也支持 HOMA Excel 文件一起导入。</span>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".csv,.txt,text/csv,text/plain"
+                accept=".csv,.txt,.xlsx,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                 multiple
                 onChange={handleFileInput}
                 hidden
@@ -2374,19 +2390,19 @@ function App() {
       </div>
 
       {hasImportedData ? (
-        <MakerSheetPrintView
-          groups={makerColorGroups}
-          dateRangeLabel={activeDateRangeLabel}
-        />
-      ) : null}
+            <MakerSheetPrintView
+              groups={makerColorGroups}
+              dateRangeLabel={activeDateRangeLabel}
+            />
+          ) : null}
 
       {hasImportedData ? (
-        <DailyOrderPrintView
-          rows={dailyRows}
-          colorGroups={dailyColorGroups}
-          listMode={dailyPrintMeta?.listMode ?? dailyListMode}
-        />
-      ) : null}
+            <DailyOrderPrintView
+              rows={dailyRows}
+              colorGroups={dailyColorGroups}
+              listMode={dailyPrintMeta?.listMode ?? dailyListMode}
+            />
+          ) : null}
     </>
   );
 }
