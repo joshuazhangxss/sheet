@@ -475,6 +475,18 @@ function isHomaExcelFile(file: File): boolean {
   return /\.xlsx?$/i.test(file.name);
 }
 
+function buildLabelWarningReminder(warnings: string[]): string {
+  if (warnings.some((warning) => warning.includes('标签购买失败订单'))) {
+    return ' 注意：有标签购买失败订单，请查看标签解析警告并单独处理。';
+  }
+
+  if (warnings.length > 0) {
+    return ' 请查看标签解析警告。';
+  }
+
+  return '';
+}
+
 function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const printCleanupRef = useRef<null | (() => void)>(null);
@@ -1163,13 +1175,17 @@ function App() {
       setViewMode('maker');
       setPrimaryViewMode('maker');
       setStatusMessage(
-        `已导入 ${dedupedPages.length} 页标签 PDF，并自动生成生产单：${matchedOrderIds.size} 个订单，${matchedRowCount} 条原始行。`,
+        `已导入 ${dedupedPages.length} 页标签 PDF，并自动生成生产单：${matchedOrderIds.size} 个订单，${matchedRowCount} 条原始行。${buildLabelWarningReminder(
+          warnings,
+        )}`,
       );
       return;
     }
 
     setStatusMessage(
-      `已导入 ${dedupedPages.length} 页标签 PDF，暂时还没有匹配到订单。`,
+      `已导入 ${dedupedPages.length} 页标签 PDF，暂时还没有匹配到订单。${buildLabelWarningReminder(
+        warnings,
+      )}`,
     );
   }
 

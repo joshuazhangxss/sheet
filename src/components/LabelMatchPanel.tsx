@@ -80,6 +80,9 @@ export function LabelMatchPanel({
   const duplicateCount = matches.filter((match) =>
     match.reasons.includes('重复订单'),
   ).length;
+  const errorOrderWarnings = warnings.filter((warning) =>
+    warning.includes('标签购买失败订单'),
+  );
 
   const columns: TableColumn<LabelMatch>[] = [
     {
@@ -285,9 +288,22 @@ export function LabelMatchPanel({
             <h3>标签解析警告</h3>
             <span>{warnings.length}</span>
           </div>
+          {errorOrderWarnings.length > 0 ? (
+            <div className="error-order-reminder" role="alert">
+              <strong>注意：有标签购买失败订单，请单独处理。</strong>
+              <span>{errorOrderWarnings.join(' ')}</span>
+            </div>
+          ) : null}
           <ul className="warning-list">
             {warnings.slice(0, 6).map((warning) => (
-              <li key={warning}>{warning}</li>
+              <li
+                key={warning}
+                className={
+                  warning.includes('标签购买失败订单') ? 'warning-list-error' : undefined
+                }
+              >
+                {warning}
+              </li>
             ))}
           </ul>
         </div>

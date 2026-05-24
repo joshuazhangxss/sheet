@@ -59,6 +59,18 @@ function buildDateRangeLabel(rows: OrderRow[]): string {
   return first === last ? first : `${first} 至 ${last}`;
 }
 
+function buildLabelWarningReminder(warnings: string[]): string {
+  if (warnings.some((warning) => warning.includes('标签购买失败订单'))) {
+    return ' 注意：有标签购买失败订单，请查看标签解析警告并单独处理。';
+  }
+
+  if (warnings.length > 0) {
+    return ' 请查看标签解析警告。';
+  }
+
+  return '';
+}
+
 function downloadCsv(
   filename: string,
   rows: Array<Record<string, string | number>>,
@@ -225,12 +237,18 @@ export function HomaWorkflow() {
     if (matchedIds.size > 0) {
       setViewMode('maker');
       setStatusMessage(
-        `已导入 ${dedupedPages.length} 页标签，并匹配到 ${matchedIds.size} 个订单，已自动生成生产单。`,
+        `已导入 ${dedupedPages.length} 页标签，并匹配到 ${matchedIds.size} 个订单，已自动生成生产单。${buildLabelWarningReminder(
+          warnings,
+        )}`,
       );
       return;
     }
 
-    setStatusMessage(`已导入 ${dedupedPages.length} 页标签，但还没有匹配到订单。`);
+    setStatusMessage(
+      `已导入 ${dedupedPages.length} 页标签，但还没有匹配到订单。${buildLabelWarningReminder(
+        warnings,
+      )}`,
+    );
   }
 
   async function importExcelFiles(files: File[]) {

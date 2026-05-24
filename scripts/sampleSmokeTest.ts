@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { PDFDocument } from 'pdf-lib';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import * as XLSX from 'xlsx';
 
 import { LabelMatchPanel } from '../src/components/LabelMatchPanel';
 import { MakerSheetPrintView } from '../src/components/MakerSheetPrintView';
@@ -13,6 +14,10 @@ import {
   getMatchableLabelPages,
   matchLabelPages,
 } from '../src/lib/labelMatching';
+import {
+  buildHomaOrderListRows,
+  parseHomaExcel,
+} from '../src/lib/homaProcessing';
 import {
   buildDailyColorGroups,
   buildDailyOrderRows,
@@ -66,6 +71,22 @@ function countMatches(haystack: string, pattern: RegExp): number {
 
 function expectIncludes(haystack: string, needle: string) {
   assert.ok(haystack.includes(needle), `Expected output to include "${needle}".`);
+}
+
+function createWorkbookFile(name: string, rows: unknown[][]): File {
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.aoa_to_sheet(rows);
+
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Orders');
+
+  const bytes = XLSX.write(workbook, {
+    bookType: 'xlsx',
+    type: 'array',
+  }) as ArrayBuffer;
+
+  return new File([bytes], name, {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
 }
 
 async function main() {
@@ -1039,6 +1060,52 @@ async function main() {
     'Aggregated label matches should sum quantities across same-order rows.',
   );
 
+  const summaryWithErrorPages: LabelPage[] = [
+    {
+      id: 'summary-error-label-1',
+      sourceName: 'summary-with-error.pdf',
+      pageNumber: 1,
+      text: '',
+      normalizedText: '',
+      width: 288,
+      height: 432,
+    },
+    {
+      id: 'summary-error-label-2',
+      sourceName: 'summary-with-error.pdf',
+      pageNumber: 2,
+      text: '',
+      normalizedText: '',
+      width: 288,
+      height: 432,
+    },
+    {
+      id: 'summary-error-page',
+      sourceName: 'summary-with-error.pdf',
+      pageNumber: 3,
+      text: 'List of orders with successful label purchase 111-1111111-1111111 222-2222222-2222222 List of orders with error in label purchase 333-3333333-3333333',
+      normalizedText: '',
+      width: 288,
+      height: 432,
+    },
+  ];
+  const summaryWithErrorMatches = matchLabelPages(
+    summaryWithErrorPages,
+    summaryFallbackRows,
+    summaryFallbackMasterRows,
+  );
+
+  assert.equal(
+    getMatchableLabelPages(summaryWithErrorPages).length,
+    2,
+    'Summary pages that also contain failed label purchases should still be excluded from the label count.',
+  );
+  assert.deepEqual(
+    summaryWithErrorMatches.map((match) => match.amazonOrderId),
+    ['111-1111111-1111111', '222-2222222-2222222'],
+    'Failed label-purchase order ids should not count as successful labels or disable sequence fallback.',
+  );
+
   const continuationSummaryPages: LabelPage[] = [
     {
       id: 'continuation-label-1',
@@ -1581,6 +1648,30 @@ async function main() {
     ],
     'Weak text pages should still use sequence fallback when the summary-page order is clear.',
   );
+
+  const homaImport = await parseHomaExcel(
+    createWorkbookFile('homa-order-date.xlsx', [
+      ['Order Date', 'Order No', 'Customer Name', 'SKU', 'Description', 'Product Size', 'Quantity'],
+      [46145, 'HOMA-1001', 'Jane Buyer', 'BG-ST-8X10', 'Beige Straight Shade', "8' x 10'", 2],
+    ]),
+  );
+
+  assert.equal(homaImport.rows.length, 1, 'HOMA Excel import should parse valid English-header rows.');
+  assert.equal(
+    homaImport.rows[0]?.purchaseDate,
+    '2026-05-03',
+    'HOMA Excel import should normalize serial dates for accepted English order-date headers.',
+  );
+  assert.equal(
+    homaImport.rows[0]?.purchaseDateTime,
+    '2026-05-03T00:00',
+    'HOMA Excel import should expose normalized dates to date sorting and filtering.',
+  );
+
+  const homaOrderRows = buildHomaOrderListRows(homaImport.rows, {});
+
+  assert.equal(homaOrderRows[0]?.customerName, 'Jane Buyer');
+  assert.equal(homaOrderRows[0]?.qty, 2);
 
   const embeddedFontBytes = await readFile('public/fonts/arial-unicode.ttf');
   const backPdfBytes = await buildLabelBackPdf(labelPages, labelMatches, embeddedFontBytes);

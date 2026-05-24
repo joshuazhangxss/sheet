@@ -17,9 +17,28 @@ function normalizeLabelText(value: string): string {
 }
 
 const AMAZON_ORDER_ID_PATTERN = /\b\d{3}-\d{7}-\d{7}\b/g;
+const ERROR_ORDER_LIST_PAGE_PATTERN = /list of orders with (?:an )?errors? in label purchase/i;
 
 function isOrderListPageText(value: string): boolean {
   return /list of orders with successful label purchase/i.test(value);
+}
+
+function hasErrorOrderListSection(value: string): boolean {
+  return ERROR_ORDER_LIST_PAGE_PATTERN.test(value);
+}
+
+function extractErrorOrderIds(value: string): string[] {
+  const errorHeaderMatch = value.match(ERROR_ORDER_LIST_PAGE_PATTERN);
+
+  if (!errorHeaderMatch) {
+    return [];
+  }
+
+  const errorSectionText = value.slice(
+    (errorHeaderMatch.index ?? 0) + errorHeaderMatch[0].length,
+  );
+
+  return Array.from(new Set(errorSectionText.match(AMAZON_ORDER_ID_PATTERN) ?? []));
 }
 
 function isOrderListContinuationPageText(value: string): boolean {
@@ -50,7 +69,7 @@ function collectOrderListPageNumbers(
   orderedPages.forEach((page) => {
     if (isOrderListPageText(page.text)) {
       orderListPages.push(page.pageNumber);
-      previousWasOrderList = true;
+      previousWasOrderList = !hasErrorOrderListSection(page.text);
       return;
     }
 
@@ -108,6 +127,12 @@ export async function parseLabelPdf(file: File): Promise<LabelParseResult> {
   }
 
   const orderListPages = collectOrderListPageNumbers(pages);
+  const errorOrderEntries = pages
+    .map((page) => ({
+      pageNumber: page.pageNumber,
+      orderIds: extractErrorOrderIds(page.text),
+    }))
+    .filter((entry) => entry.orderIds.length > 0);
   const imageOnlyPages = pages
     .filter((page) => !page.text.trim())
     .map((page) => page.pageNumber);
@@ -117,6 +142,14 @@ export async function parseLabelPdf(file: File): Promise<LabelParseResult> {
       `${file.name} 第 ${orderListPages.join('、')} 页是标签购买成功汇总页，不是实际标签页。`,
     );
   }
+
+  errorOrderEntries.forEach((entry) => {
+    warnings.push(
+      `${file.name} 第 ${entry.pageNumber} 页有标签购买失败订单：${entry.orderIds.join(
+        '、',
+      )}。这些订单不会作为成功标签匹配，请单独处理。`,
+    );
+  });
 
   if (imageOnlyPages.length > 0) {
     warnings.push(

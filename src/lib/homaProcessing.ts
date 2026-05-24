@@ -113,6 +113,12 @@ function findValue(
   return '';
 }
 
+function headerMatchesAliases(header: string, aliases: readonly string[]): boolean {
+  const normalizedHeader = normalizeHeader(header);
+
+  return aliases.some((alias) => normalizeHeader(alias) === normalizedHeader);
+}
+
 function parseColor(description: string, sku: string): { zh: string; en: string } {
   const source = `${description} ${sku}`;
 
@@ -197,7 +203,7 @@ export async function parseHomaExcel(file: File): Promise<ParsedImport> {
           headers.push(header);
         }
 
-        if (normalizeHeader(header) === normalizeHeader('订单日期')) {
+        if (headerMatchesAliases(header, HOMA_COLUMN_ALIASES.orderDate)) {
           normalized[header] = normalizeExcelDate(value);
           return;
         }

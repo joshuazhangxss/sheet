@@ -40,6 +40,7 @@ type CandidateScore = {
 };
 
 const ORDER_LIST_PAGE_PATTERN = /list of orders with successful label purchase/i;
+const ERROR_ORDER_LIST_PAGE_PATTERN = /list of orders with (?:an )?errors? in label purchase/i;
 const AMAZON_ORDER_ID_PATTERN = /\b\d{3}-\d{7}-\d{7}\b/g;
 
 const SHIPPING_FIELD_ALIASES = {
@@ -129,6 +130,10 @@ function isOrderListHeaderPage(page: LabelPage): boolean {
   return ORDER_LIST_PAGE_PATTERN.test(page.text);
 }
 
+function hasErrorOrderListSection(text: string): boolean {
+  return ERROR_ORDER_LIST_PAGE_PATTERN.test(text);
+}
+
 function isOrderListContinuationPage(page: LabelPage): boolean {
   const orderIds = extractAmazonOrderIds(page.text);
 
@@ -154,7 +159,7 @@ function collectOrderListPages(pages: LabelPage[]): LabelPage[] {
   orderedPages.forEach((page) => {
     if (isOrderListHeaderPage(page)) {
       orderListPages.push(page);
-      previousWasOrderList = true;
+      previousWasOrderList = !hasErrorOrderListSection(page.text);
       return;
     }
 
@@ -191,12 +196,26 @@ function groupPagesBySource(pages: LabelPage[]): Map<string, LabelPage[]> {
 function collectOrderListPageOrderIds(pages: LabelPage[]): string[] {
   const orderedIds: string[] = [];
   const seen = new Set<string>();
+  let previousCanContinueSuccessList = false;
 
   pages
     .slice()
     .sort((left, right) => left.pageNumber - right.pageNumber)
     .forEach((page) => {
-      extractAmazonOrderIds(page.text).forEach((orderId) => {
+      const successHeaderMatch = page.text.match(ORDER_LIST_PAGE_PATTERN);
+      const sourceText = successHeaderMatch
+        ? page.text.slice((successHeaderMatch.index ?? 0) + successHeaderMatch[0].length)
+        : previousCanContinueSuccessList
+          ? page.text
+          : '';
+      const errorHeaderMatch = sourceText.match(ERROR_ORDER_LIST_PAGE_PATTERN);
+      const successOrderText = errorHeaderMatch
+        ? sourceText.slice(0, errorHeaderMatch.index ?? 0)
+        : sourceText;
+
+      previousCanContinueSuccessList = Boolean(sourceText) && !errorHeaderMatch;
+
+      extractAmazonOrderIds(successOrderText).forEach((orderId) => {
         if (seen.has(orderId)) {
           return;
         }
