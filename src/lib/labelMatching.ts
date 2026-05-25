@@ -134,14 +134,25 @@ function hasErrorOrderListSection(text: string): boolean {
   return ERROR_ORDER_LIST_PAGE_PATTERN.test(text);
 }
 
+function getTextBeforeErrorOrderList(text: string): string {
+  const errorHeaderMatch = text.match(ERROR_ORDER_LIST_PAGE_PATTERN);
+
+  if (!errorHeaderMatch) {
+    return text;
+  }
+
+  return text.slice(0, errorHeaderMatch.index ?? 0);
+}
+
 function isOrderListContinuationPage(page: LabelPage): boolean {
-  const orderIds = extractAmazonOrderIds(page.text);
+  const successText = getTextBeforeErrorOrderList(page.text);
+  const orderIds = extractAmazonOrderIds(successText);
 
   if (orderIds.length === 0) {
     return false;
   }
 
-  const leftoverText = page.text
+  const leftoverText = successText
     .replace(AMAZON_ORDER_ID_PATTERN, ' ')
     .replace(/[-\s]+/g, ' ')
     .trim();

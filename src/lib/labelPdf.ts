@@ -27,6 +27,16 @@ function hasErrorOrderListSection(value: string): boolean {
   return ERROR_ORDER_LIST_PAGE_PATTERN.test(value);
 }
 
+function getTextBeforeErrorOrderList(value: string): string {
+  const errorHeaderMatch = value.match(ERROR_ORDER_LIST_PAGE_PATTERN);
+
+  if (!errorHeaderMatch) {
+    return value;
+  }
+
+  return value.slice(0, errorHeaderMatch.index ?? 0);
+}
+
 function extractErrorOrderIds(value: string): string[] {
   const errorHeaderMatch = value.match(ERROR_ORDER_LIST_PAGE_PATTERN);
 
@@ -42,13 +52,14 @@ function extractErrorOrderIds(value: string): string[] {
 }
 
 function isOrderListContinuationPageText(value: string): boolean {
-  const orderIds = value.match(AMAZON_ORDER_ID_PATTERN) ?? [];
+  const successText = getTextBeforeErrorOrderList(value);
+  const orderIds = successText.match(AMAZON_ORDER_ID_PATTERN) ?? [];
 
   if (orderIds.length === 0) {
     return false;
   }
 
-  const leftoverText = value
+  const leftoverText = successText
     .replace(AMAZON_ORDER_ID_PATTERN, ' ')
     .replace(/[-\s]+/g, ' ')
     .trim();

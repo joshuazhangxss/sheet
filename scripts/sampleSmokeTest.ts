@@ -1162,6 +1162,63 @@ async function main() {
     'Sequence fallback should read order ids across a summary continuation page.',
   );
 
+  const continuationWithErrorPages: LabelPage[] = [
+    {
+      id: 'continuation-error-label-1',
+      sourceName: 'continuation-error-summary.pdf',
+      pageNumber: 1,
+      text: '',
+      normalizedText: '',
+      width: 288,
+      height: 432,
+    },
+    {
+      id: 'continuation-error-label-2',
+      sourceName: 'continuation-error-summary.pdf',
+      pageNumber: 2,
+      text: '',
+      normalizedText: '',
+      width: 288,
+      height: 432,
+    },
+    {
+      id: 'continuation-error-summary-1',
+      sourceName: 'continuation-error-summary.pdf',
+      pageNumber: 3,
+      text: 'List of orders with successful label purchase 111-1111111-1111111',
+      normalizedText:
+        'LIST OF ORDERS WITH SUCCESSFUL LABEL PURCHASE 111 1111111 1111111',
+      width: 288,
+      height: 432,
+    },
+    {
+      id: 'continuation-error-summary-2',
+      sourceName: 'continuation-error-summary.pdf',
+      pageNumber: 4,
+      text: '222-2222222-2222222 List of orders with error in label purchase 333-3333333-3333333',
+      normalizedText:
+        '222 2222222 2222222 LIST OF ORDERS WITH ERROR IN LABEL PURCHASE 333 3333333 3333333',
+      width: 288,
+      height: 432,
+    },
+  ];
+  const continuationWithErrorMatches = matchLabelPages(
+    continuationWithErrorPages,
+    summaryFallbackRows,
+    summaryFallbackMasterRows,
+  );
+
+  assert.equal(
+    getMatchableLabelPages(continuationWithErrorPages).length,
+    2,
+    'Summary continuation pages with failed label purchases should still be excluded from matchable labels.',
+  );
+  assert.deepEqual(
+    continuationWithErrorMatches.map((match) => match.amazonOrderId),
+    ['111-1111111-1111111', '222-2222222-2222222'],
+    'Sequence fallback should collect successful ids before the error section on a continuation page.',
+  );
+
   const multiSummaryRows = [
     {
       ...filteredRows[0]!,
