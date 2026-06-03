@@ -296,15 +296,18 @@ export function buildHomaMasterRows(
 export function buildHomaOrderListRows(
   rows: OrderRow[],
   overrides: ProductionOverrideMap,
+  options: { preserveInputOrder?: boolean } = {},
 ): HomaOrderListRow[] {
-  return rows
-    .slice()
-    .sort((left, right) => {
+  const orderedRows = options.preserveInputOrder
+    ? rows.slice()
+    : rows.slice().sort((left, right) => {
       const leftDate = left.purchaseDateTime || left.purchaseDate;
       const rightDate = right.purchaseDateTime || right.purchaseDate;
 
       return leftDate.localeCompare(rightDate) || left.amazonOrderId.localeCompare(right.amazonOrderId);
-    })
+    });
+
+  return orderedRows
     .map((row) => {
       const override = overrides[row.id] ?? {};
 

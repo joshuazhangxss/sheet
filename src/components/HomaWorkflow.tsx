@@ -39,6 +39,43 @@ type ExportColumn = {
   label: string;
 };
 
+function buildRowsInLabelOrder(rows: OrderRow[], labelMatches: ReturnType<typeof matchLabelPages>): OrderRow[] {
+  const rowsByOrderId = new Map<string, OrderRow[]>();
+
+  rows.forEach((row) => {
+    const orderId = row.amazonOrderId.trim();
+
+    if (!orderId) {
+      return;
+    }
+
+    rowsByOrderId.set(orderId, [...(rowsByOrderId.get(orderId) ?? []), row]);
+  });
+
+  const orderedRows: OrderRow[] = [];
+  const seenRowIds = new Set<string>();
+
+  labelMatches.forEach((match) => {
+    if (match.status === 'unmatched') {
+      return;
+    }
+
+    const orderId = match.amazonOrderId.trim();
+    const matchedRows = rowsByOrderId.get(orderId) ?? [];
+
+    matchedRows.forEach((row) => {
+      if (seenRowIds.has(row.id)) {
+        return;
+      }
+
+      seenRowIds.add(row.id);
+      orderedRows.push(row);
+    });
+  });
+
+  return orderedRows;
+}
+
 function formatDateTimeLabel(value: string): string {
   return value.trim().replace('T', ' ');
 }
@@ -146,10 +183,14 @@ export function HomaWorkflow() {
   );
   const hasMatchedLabelOrders = matchedOrderIds.size > 0;
   const activeRows =
-    labelPages.length > 0
-      ? baseRows.filter((row) => matchedOrderIds.has(row.amazonOrderId.trim()))
+    hasMatchedLabelOrders
+      ? buildRowsInLabelOrder(baseRows, labelMatches)
+      : labelPages.length > 0
+        ? []
       : baseRows;
-  const orderListRows = buildHomaOrderListRows(activeRows, productionOverrides);
+  const orderListRows = buildHomaOrderListRows(activeRows, productionOverrides, {
+    preserveInputOrder: hasMatchedLabelOrders,
+  });
   const makerColorGroups = buildMakerColorGroups(
     buildMakerRows(buildHomaMasterRows(activeRows, productionOverrides)),
   );

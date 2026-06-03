@@ -190,9 +190,37 @@ function buildFullRowSignature(original: RawSourceRecord): string {
     .join('|');
 }
 
+function getOriginalCell(original: RawSourceRecord, aliases: string[]): string {
+  const normalizedAliases = new Set(aliases.map(normalizeHeader));
+
+  for (const [key, value] of Object.entries(original)) {
+    if (normalizedAliases.has(normalizeHeader(key))) {
+      return cleanCell(value);
+    }
+  }
+
+  return '';
+}
+
 function buildDedupKey(row: OrderRow): string {
+  const orderItemId = getOriginalCell(row.original, [
+    'order-item-id',
+    'order item id',
+    'amazon-order-item-id',
+    'item-id',
+  ]);
+
+  if (row.amazonOrderId && orderItemId) {
+    return `${row.amazonOrderId}::line-item::${orderItemId.toLowerCase()}`;
+  }
+
   if (row.amazonOrderId && row.productName) {
-    return `${row.amazonOrderId}::${row.productName.toLowerCase()}`;
+    return [
+      row.amazonOrderId,
+      row.productName.toLowerCase(),
+      row.sku.trim().toLowerCase(),
+      buildFullRowSignature(row.original).toLowerCase(),
+    ].join('::');
   }
 
   return buildFullRowSignature(row.original).toLowerCase();
@@ -675,6 +703,16 @@ function formatDimensionToken(value: string): string {
   return `${numericValue}${normalizeUnit(unit)}`;
 }
 
+function formatSlashDimensionToken(value: string): string {
+  const formatted = formatDimensionToken(value);
+
+  if (/^\d{1,3}(?:\.\d+)?$/.test(formatted)) {
+    return `${formatted}’`;
+  }
+
+  return formatted;
+}
+
 export function extractSize(productName: string, sku: string): string {
   const dimensionToken =
     /(?:\d{1,2}\s*(?:ft|feet|foot|['’′`])\s*\d{1,2}\s*(?:in|inch|inches|["”“])|\d{1,3}(?:\.\d+)?\s*(?:ft|feet|foot|in|inch|inches|['’′`"])?)/
@@ -695,6 +733,27 @@ export function extractSize(productName: string, sku: string): string {
       .slice(1)
       .filter((part): part is string => Boolean(part))
       .map(formatDimensionToken)
+      .filter(Boolean);
+
+    if (formattedParts.length >= 2) {
+      return formattedParts.join(' X ').trim();
+    }
+  }
+
+  const slashPattern =
+    /(?:^|[^0-9.])(\d{1,3}(?:\.\d+)?)\s*\/\s*(\d{1,3}(?:\.\d+)?)(?:\s*\/\s*(\d{1,3}(?:\.\d+)?))?(?=$|[^0-9.])/;
+
+  for (const source of [productName, sku]) {
+    const match = source.match(slashPattern);
+
+    if (!match) {
+      continue;
+    }
+
+    const formattedParts = match
+      .slice(1)
+      .filter((part): part is string => Boolean(part))
+      .map(formatSlashDimensionToken)
       .filter(Boolean);
 
     if (formattedParts.length >= 2) {

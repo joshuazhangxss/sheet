@@ -65,6 +65,17 @@ function buildCsv(rows: CsvRow[]): string {
   return lines.join('\n');
 }
 
+function buildCsvWithHeaders(headers: string[], rows: CsvRow[]): string {
+  const lines = [
+    headers.join(','),
+    ...rows.map((row) =>
+      headers.map((header) => JSON.stringify(String(row[header] ?? ''))).join(','),
+    ),
+  ];
+
+  return lines.join('\n');
+}
+
 function countMatches(haystack: string, pattern: RegExp): number {
   return haystack.match(pattern)?.length ?? 0;
 }
@@ -299,6 +310,16 @@ async function main() {
     'Triangle shades should keep all three dimensions instead of truncating to two.',
   );
   assert.equal(
+    extractSize('', 'HR-TRI-zb-Brown5/5/7.1'),
+    '5’ X 5’ X 7.1’',
+    'Triangle sizes encoded with slash-separated SKU dimensions should be parsed.',
+  );
+  assert.equal(
+    extractSize('', 'HR-ZB-Blue5/12'),
+    '5’ X 12’',
+    'Two-part slash-separated SKU dimensions should be parsed.',
+  );
+  assert.equal(
     extractSize(`Eden's Decor Balcony Privacy Screen Brown 2'6"x 21' Cover Mesh`, ''),
     '2’6” X 21’',
     'Mixed feet-inch sizes should still be extracted after the dimension parser update.',
@@ -419,6 +440,53 @@ async function main() {
     true,
     'Bundled maker rows should use compact worker-facing A / B / C style markers.',
   );
+
+  const triangleHeaders = [...CSV_HEADERS, 'order-item-id'];
+  const sameOrderTriangleImport = parseAmazonText(
+    buildCsvWithHeaders(triangleHeaders, [
+      {
+        'amazon-order-id': 'TRI-BUNDLE-1',
+        'purchase-date': '2026-04-23T09:05',
+        'order-status': 'Unshipped',
+        'fulfillment-channel': 'Merchant',
+        'ship-service-level': 'Standard',
+        'product-name': 'Brown Triangle Sun Shade Sail Custom Size',
+        sku: 'HR-TRI-zb-Brown5/5/7.1',
+        'item-status': 'Unshipped',
+        quantity: 1,
+        'order-item-id': 'tri-line-1',
+      },
+      {
+        'amazon-order-id': 'TRI-BUNDLE-1',
+        'purchase-date': '2026-04-23T09:05',
+        'order-status': 'Unshipped',
+        'fulfillment-channel': 'Merchant',
+        'ship-service-level': 'Standard',
+        'product-name': 'Brown Triangle Sun Shade Sail Custom Size',
+        sku: 'HR-TRI-zb-Brown6/6/8.5',
+        'item-status': 'Unshipped',
+        quantity: 1,
+        'order-item-id': 'tri-line-2',
+      },
+    ]),
+    'same-order-triangle.csv',
+  );
+  const sameOrderTriangleMerged = mergeImportedData([], [], [sameOrderTriangleImport]);
+  const sameOrderTriangleMakerRows = buildMakerRows(
+    buildMasterRows(sameOrderTriangleMerged.rows, {}),
+  );
+
+  assert.equal(
+    sameOrderTriangleMerged.rows.length,
+    2,
+    'Same-order triangle line items with different SKUs should not be deduplicated.',
+  );
+  assert.deepEqual(
+    sameOrderTriangleMakerRows.map((row) => row.size),
+    ['5’ X 5’ X 7.1’', '6’ X 6’ X 8.5’'],
+    'Same-order triangle line items with different sizes should both reach the maker sheet.',
+  );
+
   const bundledPrintMarkup = renderToStaticMarkup(
     React.createElement(MakerSheetPrintView, {
       groups: buildMakerColorGroups(bundledMakerRows),
@@ -1605,6 +1673,33 @@ async function main() {
     'Sequence fallback should still match known pages even if one summary-page order is missing from the uploaded data.',
   );
 
+  const missingOrderPanelMarkup = renderToStaticMarkup(
+    React.createElement(LabelMatchPanel, {
+      orderCount: rowsWithNumericOrders.length,
+      labelPageCount: getMatchableLabelPages(partialFallbackLabelPages).length,
+      sourceCount: 1,
+      warnings: [],
+      matches: partialFallbackMatches,
+      orderReviews: buildLabelOrderReviews(
+        rowsWithNumericOrders,
+        numericMasterRows,
+        partialFallbackMatches,
+      ),
+      isUsingLabelOrders: true,
+      onImport: () => {},
+      onClear: () => {},
+      onExportCsv: () => {},
+      onExportBackPdf: () => {},
+      isParsing: false,
+    }),
+  );
+
+  expectIncludes(
+    missingOrderPanelMarkup,
+    '注意：标签订单在当前订单文件里找不到。',
+  );
+  expectIncludes(missingOrderPanelMarkup, '111-9999999-9999999');
+
   const weakTextFallbackPages: LabelPage[] = [
     {
       id: 'weak-1',
@@ -1710,10 +1805,11 @@ async function main() {
     createWorkbookFile('homa-order-date.xlsx', [
       ['Order Date', 'Order No', 'Customer Name', 'SKU', 'Description', 'Product Size', 'Quantity'],
       [46145, 'HOMA-1001', 'Jane Buyer', 'BG-ST-8X10', 'Beige Straight Shade', "8' x 10'", 2],
+      [46144, 'HOMA-1002', 'Earlier Buyer', 'GY-ST-4X6', 'Grey Straight Shade', "4' x 6'", 1],
     ]),
   );
 
-  assert.equal(homaImport.rows.length, 1, 'HOMA Excel import should parse valid English-header rows.');
+  assert.equal(homaImport.rows.length, 2, 'HOMA Excel import should parse valid English-header rows.');
   assert.equal(
     homaImport.rows[0]?.purchaseDate,
     '2026-05-03',
@@ -1727,8 +1823,23 @@ async function main() {
 
   const homaOrderRows = buildHomaOrderListRows(homaImport.rows, {});
 
-  assert.equal(homaOrderRows[0]?.customerName, 'Jane Buyer');
-  assert.equal(homaOrderRows[0]?.qty, 2);
+  assert.equal(
+    homaOrderRows[0]?.amazonOrderId,
+    'HOMA-1002',
+    'HOMA order rows should sort by order date before label matching.',
+  );
+
+  const homaLabelOrderedRows = buildHomaOrderListRows(homaImport.rows, {}, {
+    preserveInputOrder: true,
+  });
+
+  assert.equal(
+    homaLabelOrderedRows[0]?.amazonOrderId,
+    'HOMA-1001',
+    'HOMA order rows should preserve label order after label matching.',
+  );
+  assert.equal(homaLabelOrderedRows[0]?.customerName, 'Jane Buyer');
+  assert.equal(homaLabelOrderedRows[0]?.qty, 2);
 
   const embeddedFontBytes = await readFile('public/fonts/arial-unicode.ttf');
   const backPdfBytes = await buildLabelBackPdf(labelPages, labelMatches, embeddedFontBytes);

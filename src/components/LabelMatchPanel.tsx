@@ -83,6 +83,14 @@ export function LabelMatchPanel({
   const errorOrderWarnings = warnings.filter((warning) =>
     warning.includes('标签购买失败订单'),
   );
+  const missingOrderIds = Array.from(
+    new Set(
+      matches
+        .filter((match) => match.reasons.includes('订单数据缺失') && match.amazonOrderId.trim())
+        .map((match) => match.amazonOrderId.trim()),
+    ),
+  );
+  const warningCount = warnings.length + missingOrderIds.length;
 
   const columns: TableColumn<LabelMatch>[] = [
     {
@@ -277,35 +285,45 @@ export function LabelMatchPanel({
         </div>
         <div className="check-card">
           <span className="check-label">提示</span>
-          <strong>{warnings.length + duplicateCount}</strong>
+          <strong>{warningCount + duplicateCount}</strong>
           <p>图片标签页会优先按汇总页顺序匹配。</p>
         </div>
       </div>
 
-      {warnings.length > 0 ? (
+      {warningCount > 0 ? (
         <div className="check-panel">
           <div className="check-panel-head">
-            <h3>标签解析警告</h3>
-            <span>{warnings.length}</span>
+            <h3>标签解析/匹配警告</h3>
+            <span>{warningCount}</span>
           </div>
+          {missingOrderIds.length > 0 ? (
+            <div className="error-order-reminder" role="alert">
+              <strong>注意：标签订单在当前订单文件里找不到。</strong>
+              <span>
+                请确认上传的是同一批订单 TXT/CSV。缺少订单：{missingOrderIds.join('、')}
+              </span>
+            </div>
+          ) : null}
           {errorOrderWarnings.length > 0 ? (
             <div className="error-order-reminder" role="alert">
               <strong>注意：有标签购买失败订单，请单独处理。</strong>
               <span>{errorOrderWarnings.join(' ')}</span>
             </div>
           ) : null}
-          <ul className="warning-list">
-            {warnings.slice(0, 6).map((warning) => (
-              <li
-                key={warning}
-                className={
-                  warning.includes('标签购买失败订单') ? 'warning-list-error' : undefined
-                }
-              >
-                {warning}
-              </li>
-            ))}
-          </ul>
+          {warnings.length > 0 ? (
+            <ul className="warning-list">
+              {warnings.slice(0, 6).map((warning) => (
+                <li
+                  key={warning}
+                  className={
+                    warning.includes('标签购买失败订单') ? 'warning-list-error' : undefined
+                  }
+                >
+                  {warning}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
 
