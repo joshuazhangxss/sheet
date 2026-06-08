@@ -1971,6 +1971,28 @@ async function main() {
     2,
     'A grouped HOMA label should carry both Excel row ids into the production batch.',
   );
+  const homaDefaultEdgeMarkup = renderToStaticMarkup(
+    React.createElement(MakerSheetPrintView, {
+      groups: buildMakerColorGroups(buildMakerRows(homaMultiItemMasterRows)),
+      dateRangeLabel: 'HOMA default edge',
+    }),
+  );
+
+  assert.equal(
+    homaDefaultEdgeMarkup.includes('直边'),
+    false,
+    'HOMA default edge rows should not print 直边 after the size.',
+  );
+  assert.equal(
+    homaDefaultEdgeMarkup.includes('弯边'),
+    false,
+    'HOMA default edge rows should not print 弯边 after the size.',
+  );
+  assert.equal(
+    homaDefaultEdgeMarkup.includes('待确认'),
+    false,
+    'HOMA default edge rows should not print a placeholder edge after the size.',
+  );
 
   const embeddedFontBytes = await readFile('public/fonts/arial-unicode.ttf');
   const backPdfBytes = await buildLabelBackPdf(labelPages, labelMatches, embeddedFontBytes);

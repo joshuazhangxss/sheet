@@ -164,7 +164,7 @@ function buildWorkerMark(row: MakerRow): string {
     return '';
   }
 
-  return row.productType || '待确认';
+  return row.productType || '';
 }
 
 function isSingleDigitLeadingDimension(segment: string): boolean {
