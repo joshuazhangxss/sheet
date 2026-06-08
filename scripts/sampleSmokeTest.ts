@@ -1269,6 +1269,15 @@ async function main() {
       width: 288,
       height: 432,
     },
+    {
+      id: 'continuation-error-summary-3',
+      sourceName: 'continuation-error-summary.pdf',
+      pageNumber: 5,
+      text: '444-4444444-4444444 555-5555555-5555555',
+      normalizedText: '444 4444444 4444444 555 5555555 5555555',
+      width: 288,
+      height: 432,
+    },
   ];
   const continuationWithErrorMatches = matchLabelPages(
     continuationWithErrorPages,
@@ -1279,7 +1288,7 @@ async function main() {
   assert.equal(
     getMatchableLabelPages(continuationWithErrorPages).length,
     2,
-    'Summary continuation pages with failed label purchases should still be excluded from matchable labels.',
+    'Summary continuation pages with failed label purchases should still be excluded from matchable labels, including error-only continuation pages.',
   );
   assert.deepEqual(
     continuationWithErrorMatches.map((match) => match.amazonOrderId),

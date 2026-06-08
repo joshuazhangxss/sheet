@@ -51,6 +51,10 @@ function extractErrorOrderIds(value: string): string[] {
   return Array.from(new Set(errorSectionText.match(AMAZON_ORDER_ID_PATTERN) ?? []));
 }
 
+function extractOrderIds(value: string): string[] {
+  return Array.from(new Set(value.match(AMAZON_ORDER_ID_PATTERN) ?? []));
+}
+
 function isOrderListContinuationPageText(value: string): boolean {
   const successText = getTextBeforeErrorOrderList(value);
   const orderIds = successText.match(AMAZON_ORDER_ID_PATTERN) ?? [];
@@ -80,7 +84,7 @@ function collectOrderListPageNumbers(
   orderedPages.forEach((page) => {
     if (isOrderListPageText(page.text)) {
       orderListPages.push(page.pageNumber);
-      previousWasOrderList = !hasErrorOrderListSection(page.text);
+      previousWasOrderList = true;
       return;
     }
 
@@ -94,6 +98,51 @@ function collectOrderListPageNumbers(
   });
 
   return orderListPages;
+}
+
+function collectErrorOrderEntries(
+  pages: Array<{
+    pageNumber: number;
+    text: string;
+  }>,
+): Array<{ pageNumber: number; orderIds: string[] }> {
+  const orderedPages = pages.slice().sort((left, right) => left.pageNumber - right.pageNumber);
+  const entries: Array<{ pageNumber: number; orderIds: string[] }> = [];
+  let previousWasErrorOrderList = false;
+
+  orderedPages.forEach((page) => {
+    if (hasErrorOrderListSection(page.text)) {
+      const orderIds = extractErrorOrderIds(page.text);
+
+      if (orderIds.length > 0) {
+        entries.push({
+          pageNumber: page.pageNumber,
+          orderIds,
+        });
+      }
+
+      previousWasErrorOrderList = true;
+      return;
+    }
+
+    if (previousWasErrorOrderList && isOrderListContinuationPageText(page.text)) {
+      const orderIds = extractOrderIds(page.text);
+
+      if (orderIds.length > 0) {
+        entries.push({
+          pageNumber: page.pageNumber,
+          orderIds,
+        });
+      }
+
+      previousWasErrorOrderList = true;
+      return;
+    }
+
+    previousWasErrorOrderList = false;
+  });
+
+  return entries;
 }
 
 export async function parseLabelPdf(file: File): Promise<LabelParseResult> {
@@ -138,12 +187,7 @@ export async function parseLabelPdf(file: File): Promise<LabelParseResult> {
   }
 
   const orderListPages = collectOrderListPageNumbers(pages);
-  const errorOrderEntries = pages
-    .map((page) => ({
-      pageNumber: page.pageNumber,
-      orderIds: extractErrorOrderIds(page.text),
-    }))
-    .filter((entry) => entry.orderIds.length > 0);
+  const errorOrderEntries = collectErrorOrderEntries(pages);
   const imageOnlyPages = pages
     .filter((page) => !page.text.trim())
     .map((page) => page.pageNumber);

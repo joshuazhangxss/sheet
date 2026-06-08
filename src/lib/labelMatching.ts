@@ -130,10 +130,6 @@ function isOrderListHeaderPage(page: LabelPage): boolean {
   return ORDER_LIST_PAGE_PATTERN.test(page.text);
 }
 
-function hasErrorOrderListSection(text: string): boolean {
-  return ERROR_ORDER_LIST_PAGE_PATTERN.test(text);
-}
-
 function getTextBeforeErrorOrderList(text: string): string {
   const errorHeaderMatch = text.match(ERROR_ORDER_LIST_PAGE_PATTERN);
 
@@ -170,7 +166,7 @@ function collectOrderListPages(pages: LabelPage[]): LabelPage[] {
   orderedPages.forEach((page) => {
     if (isOrderListHeaderPage(page)) {
       orderListPages.push(page);
-      previousWasOrderList = !hasErrorOrderListSection(page.text);
+      previousWasOrderList = true;
       return;
     }
 
