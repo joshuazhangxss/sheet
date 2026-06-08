@@ -12,10 +12,13 @@ import { MakerSheetBoard } from './MakerSheetBoard';
 import { MakerSheetPrintView } from './MakerSheetPrintView';
 import {
   buildLabelBackPdf,
-  buildLabelOrderReviews,
   getMatchableLabelPages,
-  matchLabelPages,
 } from '../lib/labelMatching';
+import {
+  buildHomaSequenceLabelMatches,
+  buildHomaSequenceOrderReviews,
+  getHomaLabelGroupCount,
+} from '../lib/homaLabelMatching';
 import {
   buildMakerColorGroups,
   buildMakerRows,
@@ -29,6 +32,7 @@ import {
 } from '../lib/homaProcessing';
 import type {
   LabelPage,
+  LabelMatch,
   OrderRow,
   ProductionOverrideMap,
 } from '../types';
@@ -39,19 +43,8 @@ type ExportColumn = {
   label: string;
 };
 
-function buildRowsInLabelOrder(rows: OrderRow[], labelMatches: ReturnType<typeof matchLabelPages>): OrderRow[] {
-  const rowsByOrderId = new Map<string, OrderRow[]>();
-
-  rows.forEach((row) => {
-    const orderId = row.amazonOrderId.trim();
-
-    if (!orderId) {
-      return;
-    }
-
-    rowsByOrderId.set(orderId, [...(rowsByOrderId.get(orderId) ?? []), row]);
-  });
-
+function buildRowsInLabelOrder(rows: OrderRow[], labelMatches: LabelMatch[]): OrderRow[] {
+  const rowsById = new Map(rows.map((row) => [row.id, row]));
   const orderedRows: OrderRow[] = [];
   const seenRowIds = new Set<string>();
 
@@ -60,11 +53,16 @@ function buildRowsInLabelOrder(rows: OrderRow[], labelMatches: ReturnType<typeof
       return;
     }
 
-    const orderId = match.amazonOrderId.trim();
-    const matchedRows = rowsByOrderId.get(orderId) ?? [];
+    const sourceRowIds = match.sourceRowId.split('::').filter(Boolean);
 
-    matchedRows.forEach((row) => {
-      if (seenRowIds.has(row.id)) {
+    sourceRowIds.forEach((sourceRowId) => {
+      if (seenRowIds.has(sourceRowId)) {
+        return;
+      }
+
+      const row = rowsById.get(sourceRowId);
+
+      if (!row) {
         return;
       }
 
@@ -173,23 +171,27 @@ export function HomaWorkflow() {
   );
 
   const allMasterRows = buildHomaMasterRows(baseRows, productionOverrides);
-  const labelMatches = matchLabelPages(labelPages, baseRows, allMasterRows);
   const matchableLabelPages = getMatchableLabelPages(labelPages);
-  const labelOrderReviews = buildLabelOrderReviews(baseRows, allMasterRows, labelMatches);
-  const matchedOrderIds = new Set(
-    labelMatches
-      .filter((match) => match.status !== 'unmatched' && match.amazonOrderId.trim())
-      .map((match) => match.amazonOrderId.trim()),
-  );
-  const hasMatchedLabelOrders = matchedOrderIds.size > 0;
+  const labelMatches = buildHomaSequenceLabelMatches(labelPages, baseRows, allMasterRows);
+  const labelOrderReviews = buildHomaSequenceOrderReviews(labelMatches);
+  const homaLabelGroupCount = getHomaLabelGroupCount(baseRows);
+  const matchedLabelRowCount = labelMatches.filter(
+    (match) => match.status !== 'unmatched' && match.sourceRowId,
+  ).length;
+  const matchedSourceRowCount = buildRowsInLabelOrder(baseRows, labelMatches).length;
+  const missingLabelGroupCount = Math.max(homaLabelGroupCount - matchableLabelPages.length, 0);
+  const missingExcelRowCount = labelMatches.filter((match) =>
+    match.reasons.includes('Excel数据缺失'),
+  ).length;
+  const hasMatchedLabelRows = matchedLabelRowCount > 0;
   const activeRows =
-    hasMatchedLabelOrders
+    hasMatchedLabelRows
       ? buildRowsInLabelOrder(baseRows, labelMatches)
       : labelPages.length > 0
         ? []
       : baseRows;
   const orderListRows = buildHomaOrderListRows(activeRows, productionOverrides, {
-    preserveInputOrder: hasMatchedLabelOrders,
+    preserveInputOrder: hasMatchedLabelRows,
   });
   const makerColorGroups = buildMakerColorGroups(
     buildMakerRows(buildHomaMasterRows(activeRows, productionOverrides)),
@@ -265,21 +267,38 @@ export function HomaWorkflow() {
       return true;
     });
     const mergedPages = [...labelPages, ...dedupedPages];
-    const mergedMatches = matchLabelPages(mergedPages, baseRows, allMasterRows);
-    const matchedIds = new Set(
-      mergedMatches
-        .filter((match) => match.status !== 'unmatched' && match.amazonOrderId.trim())
-        .map((match) => match.amazonOrderId.trim()),
+    const mergedMatches = buildHomaSequenceLabelMatches(mergedPages, baseRows, allMasterRows);
+    const matchedGroups = mergedMatches.filter(
+      (match) => match.status !== 'unmatched' && match.sourceRowId,
     );
+    const matchedSourceRows = buildRowsInLabelOrder(baseRows, mergedMatches);
+    const missingExcelRows = mergedMatches.filter((match) =>
+      match.reasons.includes('Excel数据缺失'),
+    );
+    const missingLabelGroups = Math.max(
+      getHomaLabelGroupCount(baseRows) - getMatchableLabelPages(mergedPages).length,
+      0,
+    );
+    const nextWarnings = [...warnings];
+
+    if (missingLabelGroups > 0) {
+      nextWarnings.push(
+        `HOMA Excel 有 ${missingLabelGroups} 个订单没有对应标签页，请确认这些订单是否标签购买失败或未打印。`,
+      );
+    }
 
     setLabelPages((current) => [...current, ...dedupedPages]);
-    setLabelWarnings((current) => [...current, ...warnings]);
+    setLabelWarnings((current) => [...current, ...nextWarnings]);
 
-    if (matchedIds.size > 0) {
+    if (matchedGroups.length > 0) {
       setViewMode('maker');
       setStatusMessage(
-        `已导入 ${dedupedPages.length} 页标签，并匹配到 ${matchedIds.size} 个订单，已自动生成生产单。${buildLabelWarningReminder(
-          warnings,
+        `已导入 ${dedupedPages.length} 页标签，并按 Excel 顺序匹配到 ${matchedGroups.length} 个订单、${matchedSourceRows.length} 行，已自动生成生产单。${
+          missingExcelRows.length > 0
+            ? ` 另有 ${missingExcelRows.length} 页标签没有对应 Excel 行。`
+            : ''
+        }${missingLabelGroups > 0 ? ` 另有 ${missingLabelGroups} 个 Excel 订单没有对应标签页。` : ''}${buildLabelWarningReminder(
+          nextWarnings,
         )}`,
       );
       return;
@@ -287,7 +306,7 @@ export function HomaWorkflow() {
 
     setStatusMessage(
       `已导入 ${dedupedPages.length} 页标签，但还没有匹配到订单。${buildLabelWarningReminder(
-        warnings,
+        nextWarnings,
       )}`,
     );
   }
@@ -611,8 +630,14 @@ export function HomaWorkflow() {
               </div>
               <div className="check-card">
                 <span className="check-label">标签匹配</span>
-                <strong>{hasMatchedLabelOrders ? matchedOrderIds.size : 0}</strong>
-                <p>{hasMatchedLabelOrders ? '已按标签筛出订单。' : '上传标签后会自动筛批次。'}</p>
+                <strong>{hasMatchedLabelRows ? matchedSourceRowCount : 0}</strong>
+                <p>
+                  {hasMatchedLabelRows
+                    ? `已按 Excel 顺序生成批次${
+                        missingExcelRowCount ? `，${missingExcelRowCount} 页缺少 Excel 行` : ''
+                      }${missingLabelGroupCount ? `，${missingLabelGroupCount} 个订单缺少标签页` : ''}。`
+                    : '上传标签后会按 Excel 顺序生成批次。'}
+                </p>
               </div>
             </div>
           ) : null}
@@ -626,7 +651,7 @@ export function HomaWorkflow() {
             warnings={labelWarnings}
             matches={labelMatches}
             orderReviews={labelOrderReviews}
-            isUsingLabelOrders={hasMatchedLabelOrders}
+            isUsingLabelOrders={hasMatchedLabelRows}
             onImport={(files) => {
               void importLabelFiles(files);
             }}
@@ -645,7 +670,7 @@ export function HomaWorkflow() {
               <div>
                 <h2>{viewMode === 'orders' ? '订单表' : '生产单'}</h2>
                 <p className="section-text">
-                  {hasMatchedLabelOrders
+                  {hasMatchedLabelRows
                     ? `当前来源：标签批次。时间范围：${activeDateRangeLabel}`
                     : `当前来源：Excel 全部订单。时间范围：${activeDateRangeLabel}`}
                 </p>

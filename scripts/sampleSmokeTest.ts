@@ -16,8 +16,14 @@ import {
 } from '../src/lib/labelMatching';
 import {
   buildHomaOrderListRows,
+  buildHomaMasterRows,
   parseHomaExcel,
 } from '../src/lib/homaProcessing';
+import {
+  buildHomaSequenceLabelMatches,
+  buildHomaSequenceOrderReviews,
+  getHomaLabelGroupCount,
+} from '../src/lib/homaLabelMatching';
 import {
   buildDailyColorGroups,
   buildDailyOrderRows,
@@ -1849,6 +1855,122 @@ async function main() {
   );
   assert.equal(homaLabelOrderedRows[0]?.customerName, 'Jane Buyer');
   assert.equal(homaLabelOrderedRows[0]?.qty, 2);
+
+  const homaNoOrderImport = await parseHomaExcel(
+    createWorkbookFile('homa-no-order-number.xlsx', [
+      ['Order Date', 'Customer Name', 'SKU', 'Description', 'Product Size', 'Quantity'],
+      [46145, 'First Label Customer', 'BG-ST-8X10', 'Beige Straight Shade', "8' x 10'", 1],
+      [46145, 'Second Label Customer', 'BR-CV-5X7', 'Brown Curved Shade', "5' x 7'", 2],
+    ]),
+  );
+  const homaNoOrderMasterRows = buildHomaMasterRows(homaNoOrderImport.rows, {});
+  const homaSequenceLabelPages: LabelPage[] = [
+    {
+      id: 'homa-sequence-label-1',
+      sourceName: 'homa-sequence.pdf',
+      pageNumber: 1,
+      text: '',
+      normalizedText: '',
+      width: 288,
+      height: 432,
+    },
+    {
+      id: 'homa-sequence-label-2',
+      sourceName: 'homa-sequence.pdf',
+      pageNumber: 2,
+      text: '',
+      normalizedText: '',
+      width: 288,
+      height: 432,
+    },
+    {
+      id: 'homa-sequence-label-3',
+      sourceName: 'homa-sequence.pdf',
+      pageNumber: 3,
+      text: '',
+      normalizedText: '',
+      width: 288,
+      height: 432,
+    },
+  ];
+  const homaSequenceMatches = buildHomaSequenceLabelMatches(
+    homaSequenceLabelPages,
+    homaNoOrderImport.rows,
+    homaNoOrderMasterRows,
+  );
+  const homaSequenceReviews = buildHomaSequenceOrderReviews(homaSequenceMatches);
+
+  assert.equal(
+    homaNoOrderImport.rows.length,
+    2,
+    'HOMA Excel import should accept rows without an order-number column.',
+  );
+  assert.deepEqual(
+    homaNoOrderImport.rows.map((row) => row.amazonOrderId),
+    ['', ''],
+    'HOMA rows without order numbers should keep the order id blank instead of blocking import.',
+  );
+  assert.deepEqual(
+    homaSequenceMatches.map((match) => match.status),
+    ['matched', 'matched', 'unmatched'],
+    'HOMA labels should match Excel rows by page order and flag extra labels without Excel rows.',
+  );
+  assert.deepEqual(
+    homaSequenceMatches.slice(0, 2).map((match) => match.recipientName),
+    ['First Label Customer', 'Second Label Customer'],
+    'HOMA page-order matching should not require order numbers to identify the Excel rows.',
+  );
+  assert.deepEqual(
+    homaSequenceMatches.slice(0, 2).map((match) => match.size),
+    ['8’ X 10’', '5’ X 7’ = 2'],
+    'HOMA page-order matches should carry production details from the corresponding Excel rows.',
+  );
+  assert.deepEqual(
+    homaSequenceReviews.map((review) => review.matchedPages),
+    ['第 1 页', '第 2 页'],
+    'HOMA page-order reviews should show the assigned label page for each Excel row.',
+  );
+
+  const homaMultiItemImport = await parseHomaExcel(
+    createWorkbookFile('homa-multi-item-order.xlsx', [
+      ['No.', 'Customer Name', 'SKU', 'Description', 'Product Size', 'Quantity'],
+      [12, 'Stephanie Rinn', 'H03BG101216', '三角形米色', "10' x 12' x 16'", 1],
+      ['', 'Stephanie Rinn', 'H03BG081214', '三角形米色', "8' x 12' x 14'", 1],
+      [13, 'David Hinds', 'H03SB050507', '三角形沙色（黄色）', "5' x 5' x 7'", 1],
+    ]),
+  );
+  const homaMultiItemMasterRows = buildHomaMasterRows(homaMultiItemImport.rows, {});
+  const homaMultiItemMatches = buildHomaSequenceLabelMatches(
+    homaSequenceLabelPages.slice(0, 2),
+    homaMultiItemImport.rows,
+    homaMultiItemMasterRows,
+  );
+
+  assert.equal(
+    getHomaLabelGroupCount(homaMultiItemImport.rows),
+    2,
+    'HOMA rows with a blank No. should continue the previous label/order group.',
+  );
+  assert.equal(
+    homaMultiItemMatches[0]?.recipientName,
+    'Stephanie Rinn',
+    'The first grouped HOMA label should keep the customer from the No. row.',
+  );
+  assert.equal(
+    homaMultiItemMatches[0]?.qty,
+    2,
+    'A grouped HOMA label should sum quantities across the same order group.',
+  );
+  assert.deepEqual(
+    homaMultiItemMatches[0]?.sizeBreakdown,
+    ['10’ X 12’ X 16’', '8’ X 12’ X 14’'],
+    'A grouped HOMA label should show both sizes from the same customer/order.',
+  );
+  assert.equal(
+    homaMultiItemMatches[0]?.sourceRowId.split('::').length,
+    2,
+    'A grouped HOMA label should carry both Excel row ids into the production batch.',
+  );
 
   const embeddedFontBytes = await readFile('public/fonts/arial-unicode.ttf');
   const backPdfBytes = await buildLabelBackPdf(labelPages, labelMatches, embeddedFontBytes);

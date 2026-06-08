@@ -83,6 +83,9 @@ export function LabelMatchPanel({
   const errorOrderWarnings = warnings.filter((warning) =>
     warning.includes('标签购买失败订单'),
   );
+  const missingLabelWarnings = warnings.filter((warning) =>
+    warning.includes('没有对应标签页'),
+  );
   const missingOrderIds = Array.from(
     new Set(
       matches
@@ -310,13 +313,21 @@ export function LabelMatchPanel({
               <span>{errorOrderWarnings.join(' ')}</span>
             </div>
           ) : null}
+          {missingLabelWarnings.length > 0 ? (
+            <div className="error-order-reminder" role="alert">
+              <strong>注意：有 Excel 订单没有对应标签页。</strong>
+              <span>{missingLabelWarnings.join(' ')}</span>
+            </div>
+          ) : null}
           {warnings.length > 0 ? (
             <ul className="warning-list">
               {warnings.slice(0, 6).map((warning) => (
                 <li
                   key={warning}
                   className={
-                    warning.includes('标签购买失败订单') ? 'warning-list-error' : undefined
+                    warning.includes('标签购买失败订单') || warning.includes('没有对应标签页')
+                      ? 'warning-list-error'
+                      : undefined
                   }
                 >
                   {warning}

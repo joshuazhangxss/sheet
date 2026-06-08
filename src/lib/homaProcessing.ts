@@ -217,14 +217,14 @@ export async function parseHomaExcel(file: File): Promise<ParsedImport> {
         return;
       }
 
-      const orderId = findValue(normalized, HOMA_COLUMN_ALIASES.amazonOrderId);
       const description = findValue(normalized, HOMA_COLUMN_ALIASES.description);
 
-      if (!orderId || !description) {
-        warnings.push(`${file.name} / ${sheetName} 第 ${index + 2} 行缺少订单号或描述，已跳过。`);
+      if (!description) {
+        warnings.push(`${file.name} / ${sheetName} 第 ${index + 2} 行缺少描述，已跳过。`);
         return;
       }
 
+      normalized.__homa_row_position = `${sheetName}:${index + 2}`;
       rows.push(buildOrderRow(normalized, file.name, rows.length));
     });
   });

@@ -24,6 +24,11 @@ import {
   matchLabelPages,
 } from './lib/labelMatching';
 import {
+  buildHomaSequenceLabelMatches,
+  buildHomaSequenceOrderReviews,
+  getHomaLabelGroupCount,
+} from './lib/homaLabelMatching';
+import {
   buildDailyColorGroups,
   buildDailyOrderRows,
   buildMakerColorGroups,
@@ -46,12 +51,13 @@ import {
   sortOrderRowsForReview,
   stripRushNote,
 } from './lib/orderProcessing';
-import { parseHomaExcel } from './lib/homaProcessing';
+import { buildHomaMasterRows, parseHomaExcel } from './lib/homaProcessing';
 import type {
   DailyColorGroup,
   FilterPreset,
   FilterState,
   DailyOrderRow,
+  LabelMatch,
   LabelPage,
   LabelOrderReview,
   MakerColorGroup,
@@ -475,6 +481,55 @@ function isHomaExcelFile(file: File): boolean {
   return /\.xlsx?$/i.test(file.name);
 }
 
+function normalizeSourceHeader(value: string): string {
+  return value.replace(/\uFEFF/g, '').trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]/g, '');
+}
+
+function hasOriginalHeader(row: OrderRow, aliases: string[]): boolean {
+  const aliasSet = new Set(aliases.map(normalizeSourceHeader));
+
+  return Object.keys(row.original).some((header) => aliasSet.has(normalizeSourceHeader(header)));
+}
+
+function isHomaOrderRow(row: OrderRow): boolean {
+  return (
+    hasOriginalHeader(row, ['Customer Name', 'Name', '客户', '姓名']) &&
+    hasOriginalHeader(row, ['Description', '描述']) &&
+    hasOriginalHeader(row, ['Product Size', 'Size', '尺寸'])
+  );
+}
+
+function buildRowsFromLabelMatches(rows: OrderRow[], matches: LabelMatch[]): OrderRow[] {
+  const rowsById = new Map(rows.map((row) => [row.id, row]));
+  const orderedRows: OrderRow[] = [];
+  const seen = new Set<string>();
+
+  matches.forEach((match) => {
+    if (match.status === 'unmatched' || !match.sourceRowId || seen.has(match.sourceRowId)) {
+      return;
+    }
+
+    const sourceRowIds = match.sourceRowId.split('::').filter(Boolean);
+
+    sourceRowIds.forEach((sourceRowId) => {
+      if (seen.has(sourceRowId)) {
+        return;
+      }
+
+      const row = rowsById.get(sourceRowId);
+
+      if (!row) {
+        return;
+      }
+
+      seen.add(row.id);
+      orderedRows.push(row);
+    });
+  });
+
+  return orderedRows;
+}
+
 function buildLabelWarningReminder(warnings: string[]): string {
   if (warnings.some((warning) => warning.includes('标签购买失败订单'))) {
     return ' 注意：有标签购买失败订单，请查看标签解析警告并单独处理。';
@@ -550,32 +605,43 @@ function App() {
 
   const deferredKeyword = useDeferredValue(filters.keyword);
   const workingRows = applyRawEdits(baseRows, rawEdits);
-  const allMasterRows = buildMasterRows(workingRows, productionOverrides);
+  const isHomaOnlyBatch =
+    workingRows.length > 0 && workingRows.every((row) => isHomaOrderRow(row));
+  const allMasterRows = isHomaOnlyBatch
+    ? buildHomaMasterRows(workingRows, productionOverrides)
+    : buildMasterRows(workingRows, productionOverrides);
   const filteredRows = filterOrderRows(workingRows, {
     ...filters,
     keyword: deferredKeyword,
   });
-  const labelMatches = matchLabelPages(labelPages, workingRows, allMasterRows);
+  const labelMatches = isHomaOnlyBatch
+    ? buildHomaSequenceLabelMatches(labelPages, workingRows, allMasterRows)
+    : matchLabelPages(labelPages, workingRows, allMasterRows);
   const matchableLabelPages = getMatchableLabelPages(labelPages);
-  const labelOrderReviews: LabelOrderReview[] = buildLabelOrderReviews(
-    workingRows,
-    allMasterRows,
-    labelMatches,
-  );
+  const labelOrderReviews: LabelOrderReview[] = isHomaOnlyBatch
+    ? buildHomaSequenceOrderReviews(labelMatches)
+    : buildLabelOrderReviews(
+        workingRows,
+        allMasterRows,
+        labelMatches,
+      );
   const labelMatchedOrderIds = new Set(
     labelMatches
       .filter((match) => match.status !== 'unmatched' && match.amazonOrderId.trim())
       .map((match) => match.amazonOrderId.trim()),
   );
-  const labelMatchedRows =
-    labelMatchedOrderIds.size > 0
+  const labelMatchedRows = isHomaOnlyBatch
+    ? buildRowsFromLabelMatches(workingRows, labelMatches)
+    : labelMatchedOrderIds.size > 0
       ? workingRows.filter((row) => labelMatchedOrderIds.has(row.amazonOrderId.trim()))
       : [];
   const orderSourceRows =
     orderSourceMode === 'labels' && labelMatchedRows.length > 0 ? labelMatchedRows : filteredRows;
   const filteredReviewRows = sortOrderRowsForReview(orderSourceRows);
   const filteredOrderGroups = buildOrderGroupSummaries(filteredReviewRows);
-  const masterRows = buildMasterRows(orderSourceRows, productionOverrides);
+  const masterRows = isHomaOnlyBatch
+    ? buildHomaMasterRows(orderSourceRows, productionOverrides)
+    : buildMasterRows(orderSourceRows, productionOverrides);
   const dailyRows = buildDailyOrderRows(orderSourceRows, productionOverrides);
   const dailyColorGroups: DailyColorGroup[] = buildDailyColorGroups(dailyRows);
   const masterOrderGroups = buildMasterOrderGroupSummaries(masterRows);
@@ -1156,19 +1222,57 @@ function App() {
       return true;
     });
     const mergedPages = [...labelPages, ...dedupedPages];
-    const mergedMatches = matchLabelPages(mergedPages, workingRows, allMasterRows);
+    const mergedMatches = isHomaOnlyBatch
+      ? buildHomaSequenceLabelMatches(mergedPages, workingRows, allMasterRows)
+      : matchLabelPages(mergedPages, workingRows, allMasterRows);
+    const nextWarnings = [...warnings];
+
+    if (isHomaOnlyBatch) {
+      const matchablePageCount = getMatchableLabelPages(mergedPages).length;
+      const missingLabelRowCount = Math.max(
+        getHomaLabelGroupCount(workingRows) - matchablePageCount,
+        0,
+      );
+
+      if (missingLabelRowCount > 0) {
+        nextWarnings.push(
+          `HOMA Excel 有 ${missingLabelRowCount} 个订单没有对应标签页，请确认这些订单是否标签购买失败或未打印。`,
+        );
+      }
+    }
+
     const matchedOrderIds = new Set(
       mergedMatches
         .filter((match) => match.status !== 'unmatched' && match.amazonOrderId.trim())
         .map((match) => match.amazonOrderId.trim()),
     );
-    const matchedRowCount =
-      matchedOrderIds.size > 0
+    const homaMatchedRows = isHomaOnlyBatch
+      ? buildRowsFromLabelMatches(workingRows, mergedMatches)
+      : [];
+    const matchedRowCount = isHomaOnlyBatch
+      ? homaMatchedRows.length
+      : matchedOrderIds.size > 0
         ? workingRows.filter((row) => matchedOrderIds.has(row.amazonOrderId.trim())).length
         : 0;
 
     setLabelPages((current) => [...current, ...dedupedPages]);
-    setLabelWarnings((current) => [...current, ...warnings]);
+    setLabelWarnings((current) => [...current, ...nextWarnings]);
+
+    if (isHomaOnlyBatch && matchedRowCount > 0) {
+      setOrderSourceMode('labels');
+      setViewMode('maker');
+      setPrimaryViewMode('maker');
+      setStatusMessage(
+        `已导入 ${dedupedPages.length} 页标签 PDF，并按 Excel 顺序自动生成生产单：${matchedRowCount} 行。${
+          getHomaLabelGroupCount(workingRows) > getMatchableLabelPages(mergedPages).length
+            ? ` 另有 ${
+                getHomaLabelGroupCount(workingRows) - getMatchableLabelPages(mergedPages).length
+              } 个 Excel 订单没有对应标签页。`
+            : ''
+        }${buildLabelWarningReminder(nextWarnings)}`,
+      );
+      return;
+    }
 
     if (matchedOrderIds.size > 0) {
       setOrderSourceMode('labels');
@@ -1176,7 +1280,7 @@ function App() {
       setPrimaryViewMode('maker');
       setStatusMessage(
         `已导入 ${dedupedPages.length} 页标签 PDF，并自动生成生产单：${matchedOrderIds.size} 个订单，${matchedRowCount} 条原始行。${buildLabelWarningReminder(
-          warnings,
+          nextWarnings,
         )}`,
       );
       return;
@@ -1184,7 +1288,7 @@ function App() {
 
     setStatusMessage(
       `已导入 ${dedupedPages.length} 页标签 PDF，暂时还没有匹配到订单。${buildLabelWarningReminder(
-        warnings,
+        nextWarnings,
       )}`,
     );
   }
