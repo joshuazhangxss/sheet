@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { batchProblems, displayMerchant, labelOrderLines, emptyBatch, emptyLine, fingerprint, lineProblems, loadDraft, orderKey, releaseBatch, reviseBatch, saveDraft, suggestShipments } from '../lib/batchWorkflow';
+import { batchProblems, displayMerchant, labelOrderLines, emptyBatch, emptyLine, fingerprint, lineProblems, loadDraft, orderKey, releaseBatch, saveDraft, suggestShipments } from '../lib/batchWorkflow';
 import type { Asset, BatchDraft, OrderLine, Shipment } from '../lib/batchWorkflow';
 import { detectMapping, importFields, readTables, screenshotPrefill, tableCanImport, tableToLines } from '../lib/batchImport';
 import type { ImportField } from '../lib/batchImport';
@@ -87,7 +87,6 @@ export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
   const [selectedPrint, setSelectedPrint] = useState<number[]>([]);
   const [onlyIssues, setOnlyIssues] = useState(false);
   const [showAllOrders, setShowAllOrders] = useState(false);
-  const [undo, setUndo] = useState<BatchDraft | null>(null);
   const [loadError, setLoadError] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const importing = useRef(false);
@@ -119,12 +118,20 @@ export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
   const issues = batchProblems(draft, shipments);
   const activeLines = labelOrderLines(draft.lines, shipments);
   const released = draft.history.find(b => b.id === (historyId ?? draft.releasedId));
-  const frozen = Boolean(draft.releasedId);
+  const frozen = Boolean(busy);
   const activeIds = new Set(activeLines.map(l => l.id));
   const outsideCount = draft.lines.filter(l => !l.excluded && !activeIds.has(l.id)).length;
   const chosenShipment = shipments.find(s => s.label.id === selectedLabel);
   const screenshot = draft.screenshots.find(s => s.id === selectedScreenshot);
-  function change(next: BatchDraft) { setUndo(draft); setDraft(next); }
+  function change(next: BatchDraft) {
+    if (draft.releasedId) next = { ...next, id: emptyBatch().id, revises: draft.releasedId, releasedId: null };
+    setDraft(next); setHistoryId(null); setSelectedPrint([]); setWorksheetPreview(null);
+  }
+  function clearBatch() {
+    setDraft(emptyBatch()); setEditor(null); setSelectedScreenshot(null); setSelectedLabel(null);
+    setHistoryId(null); setSelectedPrint([]); setWorksheetPreview(null); setShowAllOrders(false); setOnlyIssues(false);
+    setStep(0); setMessage('已清空，可以重新上传。');
+  }
   function saveLine(line: OrderLine) {
     const exists = draft.lines.some(l => l.id === line.id);
     change({ ...draft, assignments: {}, lines: exists ? draft.lines.map(l => l.id === line.id ? line : l) : [...draft.lines, line],
@@ -203,13 +210,14 @@ export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
     } finally { importing.current = false; setBusy(''); }
   }
   async function release() {
+    if (draft.releasedId) { setHistoryId(null); setStep(3); return; }
     setBusy('正在保存发布批次…');
     try {
       const batch = releaseBatch(draft);
       const next = { ...draft, releasedId: batch.id, history: [...draft.history, batch] };
       await saveDraft(next);
-      setDraft(next); setUndo(null); setHistoryId(null); setSelectedPrint([]); setStep(3);
-      setMessage('批次已锁定。所有打印文件使用同一批数据与顺序。');
+      setDraft(next); setHistoryId(null); setSelectedPrint([]); setStep(3);
+      setMessage('已生成打印结果，可返回继续上传。');
     } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(''); }
   }
@@ -237,13 +245,11 @@ export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
   }
   if (!ready) return <main className="bw"><h1>仓库批次工作台</h1><p role="status">{displayedSaveStatus}</p>{loadError && <button onClick={() => window.location.reload()}>重新读取草稿</button>}</main>;
   return <main className="bw">
-    <div className="bw-save"><span>{displayedSaveStatus} · 批次 {draft.id.slice(0, 8)} {frozen ? '· 已锁定' : '· 草稿'}</span>
-      <details className="bw-more"><summary>管理</summary><div className="bw-actions"><button onClick={onAdvanced} disabled={Boolean(busy)}>高级工作台</button><button disabled={Boolean(busy)} onClick={() => { void saveDraft(draft).then(() => { setSavedDraft(draft); setSaveStatus('已保存到此浏览器'); }).catch(() => { setFailedDraft(draft); setSaveStatus('保存失败，请检查浏览器存储空间'); }); }}>立即保存</button>
-      <button disabled={Boolean(busy) || frozen} onClick={() => { change({ ...emptyBatch(), assets: draft.assets, history: draft.history }); setEditor(null); setSelectedScreenshot(null); setSelectedLabel(null); setStep(0); setMessage('已清空草稿，可以撤销。历史批次仍保留。'); }}>清空草稿</button>
-      <button disabled={!undo || Boolean(busy) || frozen} onClick={() => { if (undo) { setDraft(undo); setUndo(null); setEditor(null); } }}>撤销上一步</button>
-      <button disabled={Boolean(busy) || (!frozen && (draft.lines.length > 0 || draft.labels.length > 0 || draft.pending.length > 0 || draft.screenshots.length > 0))} onClick={() => { setDraft({ ...emptyBatch(), assets: draft.assets, history: draft.history }); setUndo(null); setHistoryId(null); setSelectedPrint([]); setStep(0); }}>新建批次</button></div></details>
-    </div>
-    <nav className="bw-steps" aria-label="批次步骤">{[{ label: '上传文件', value: 0 }, { label: '打印', value: 3 }].map(({ label, value }, index) => <button aria-current={(step === 1 ? 2 : step) === value ? 'step' : undefined} className={(step === 1 ? 2 : step) === value ? 'active' : ''} key={label} onClick={() => { if (value === 3 && !frozen && !historyId) { if (issues.length) setStep(2); else void release(); } else setStep(value); }}><span>{index + 1}</span>{label}</button>)}</nav>
+    <div className="bw-save"><span>{displayedSaveStatus}</span><div className="bw-actions">
+      <button disabled={Boolean(busy)} onClick={clearBatch} title="清空本地订单、上传文件和历史批次；不删除已下载的 PDF">清空并重新上传</button>
+      <details className="bw-more"><summary>更多</summary><button onClick={onAdvanced} disabled={Boolean(busy)}>高级工作台</button></details>
+    </div></div>
+    <nav className="bw-steps" aria-label="批次步骤">{[{ label: '上传文件', value: 0 }, { label: '打印', value: 3 }].map(({ label, value }, index) => <button disabled={Boolean(busy)} aria-current={(step === 1 ? 2 : step) === value ? 'step' : undefined} className={(step === 1 ? 2 : step) === value ? 'active' : ''} key={label} onClick={() => { if (value === 3 && !draft.releasedId) { if (!draft.releasedId && issues.length) setStep(2); else void release(); } else setStep(value); }}><span>{index + 1}</span>{label}</button>)}</nav>
     <div className="bw-shortcuts"><button onClick={() => setStep(1)}>查看 / 修改订单</button></div>
     <div className="bw-metrics"><div><strong>{new Set(activeLines.map(orderKey)).size}</strong><span>订单</span></div><div><strong>{activeLines.reduce((n, l) => n + l.qty, 0)}</strong><span>商品数量</span></div><div><strong>{shipments.length}</strong><span>运输标签</span></div></div>
     {(busy || message) && <p className="bw-message" role="status">{busy || message}</p>}
@@ -255,7 +261,7 @@ export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
           <button className="bw-primary" disabled={frozen} onClick={() => fileInput.current?.click()}>选择文件，可多选</button>
           <input ref={fileInput} type="file" multiple accept=".csv,.txt,.tsv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.webp,.bmp" hidden onChange={e => { void intake(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
         </div>
-        <div className="bw-actions"><button disabled={frozen} onClick={() => { setEditor(emptyLine()); setStep(1); }}>＋ 手动添加订单</button><button className="bw-primary" disabled={!shipments.length} onClick={() => { if (issues.length) setStep(2); else void release(); }}>查看结果并打印 →</button></div>
+        <div className="bw-actions"><button disabled={frozen} onClick={() => { setEditor(emptyLine()); setStep(1); }}>＋ 手动添加订单</button><button className="bw-primary" disabled={!shipments.length} onClick={() => { if (!draft.releasedId && issues.length) setStep(2); else void release(); }}>查看结果并打印 →</button></div>
       </section>
       {draft.assets.some(asset => draft.lines.some(l => l.id.startsWith(asset.id)) || draft.labels.some(l => l.assetId === asset.id) || draft.pending.some(t => t.id.startsWith(asset.id)) || draft.screenshots.some(s => s.assetId === asset.id)) && <section className="bw-card"><h3>本批文件</h3>{draft.assets.filter(asset => draft.lines.some(l => l.id.startsWith(asset.id)) || draft.labels.some(l => l.assetId === asset.id) || draft.pending.some(t => t.id.startsWith(asset.id)) || draft.screenshots.some(s => s.assetId === asset.id)).map(asset => <div className="bw-file" key={asset.id}><div><strong>{asset.name}</strong><small>{draft.lines.filter(l => l.id.startsWith(asset.id)).length} 个商品行 · {draft.labels.filter(l => l.assetId === asset.id).length} 个标签页 · {(asset.file.size / 1024).toFixed(0)} KB</small></div><button disabled={frozen} onClick={() => removeFile(asset.id)}>移除此文件</button></div>)}</section>}
       {draft.pending.map(table => <section className="bw-card" key={table.id}><h3>识别表格字段：{table.name}</h3><p>{table.records.length} 行。选择每个字段对应的列；不会猜测未知格式。</p>
@@ -285,11 +291,11 @@ export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
       </section>
       {chosenShipment && !frozen && <section className="bw-card bw-preview-grid"><AssetPreview asset={draft.assets.find(a => a.id === chosenShipment.label.assetId)} page={chosenShipment.label.pageNumber} /><div><h3>核对标签原件</h3><p>{chosenShipment.reason}</p><ShipmentEditor key={`${chosenShipment.label.id}:${JSON.stringify(chosenShipment.allocations)}`} shipment={chosenShipment} lines={draft.lines} onSave={allocations => { change({ ...draft, assignments: { ...draft.assignments, [chosenShipment.label.id]: { allocations, confirmed: true } } }); setSelectedLabel(null); }} /></div></section>}
     </>}
-    {step === 3 && <section className="bw-card"><div className="bw-section-head"><div><h2>打印中心</h2><p className="bw-muted">{released?.labelOrder === 'upload' ? '按标签上传顺序排列，同一文件按原页码；序号对应打印页码。' : '历史批次保留原顺序；点击“修改此批次”重新生成，可改用标签上传顺序。'}</p></div><select aria-label="选择历史批次" value={historyId ?? draft.releasedId ?? ''} onChange={e => { setHistoryId(e.target.value); setSelectedPrint([]); }}><option value="">选择已发布批次</option>{draft.history.map(b => <option key={b.id} value={b.id}>{b.id.slice(0, 8)} · {new Date(b.createdAt).toLocaleString()}</option>)}</select></div>
-      {released ? <><p>批次 {released.id.slice(0, 8)} · {released.shipments.length} 个包裹 · 数据已锁定{released.revises ? ` · 修订自 ${released.revises.slice(0, 8)}` : ''}</p>{draft.history.some(b => b.revises === released.id) && <p className="bw-error">此批次已有更新版本，请选择最新批次打印。</p>}<div className="bw-actions"><button className="bw-primary" onClick={() => void exportPdf('labels')}>打印全部标签 PDF</button><button onClick={() => void exportPdf('list')}>2. 打印顺序对照单</button><button onClick={() => void exportPdf('worksheet')}>3. 打印生产工作单</button><button disabled={Boolean(busy)} onClick={() => void exportPdf('worksheet', true)}>预览生产工作单</button></div>
+    {step === 3 && <section className="bw-card"><div className="bw-section-head"><div><h2>打印中心</h2><p className="bw-muted">{released?.labelOrder === 'upload' ? '按标签上传顺序排列，同一文件按原页码；序号对应打印页码。' : '历史批次保留原顺序；新增文件后会重新生成打印结果。'}</p></div><select aria-label="选择历史批次" value={historyId ?? draft.releasedId ?? ''} onChange={e => { setHistoryId(e.target.value); setSelectedPrint([]); }}><option value="">选择已发布批次</option>{draft.history.map(b => <option key={b.id} value={b.id}>{b.id.slice(0, 8)} · {new Date(b.createdAt).toLocaleString()}</option>)}</select></div>
+      {released ? <><p>批次 {released.id.slice(0, 8)} · {released.shipments.length} 个包裹</p>{draft.history.some(b => b.revises === released.id) && <p className="bw-error">此批次已有更新版本，请选择最新批次打印。</p>}<div className="bw-actions"><button className="bw-primary" onClick={() => void exportPdf('labels')}>打印全部标签 PDF</button><button onClick={() => void exportPdf('list')}>2. 打印顺序对照单</button><button onClick={() => void exportPdf('worksheet')}>3. 打印生产工作单</button><button disabled={Boolean(busy)} onClick={() => void exportPdf('worksheet', true)}>预览生产工作单</button></div>
         {worksheetPreview?.batchId === released.id && <section className="bw-card" aria-label="生产工作单预览"><div className="bw-actions"><h3>生产工作单预览</h3><button onClick={() => setWorksheetPreview(null)}>关闭预览</button><button onClick={() => void exportPdf('worksheet')}>下载打印 PDF</button></div><AssetPreview asset={worksheetPreview.asset} /></section>}
         <div className="bw-table-wrap"><table><thead><tr><th>补打</th><th>序号</th><th>商家 / 品牌</th><th>标签背面：类型 · 颜色 · 尺寸 · 数量</th><th>订单号</th></tr></thead><tbody>{released.shipments.map((s, index) => <tr key={s.label.id}><td><input aria-label={`选择补打 ${index + 1}`} type="checkbox" checked={selectedPrint.includes(index)} onChange={e => setSelectedPrint(e.target.checked ? [...selectedPrint, index].sort((a, b) => a - b) : selectedPrint.filter(i => i !== index))} /></td><td>{String(index + 1).padStart(3, '0')}</td><td>{displayMerchant(released.lines.find(l => l.id === s.allocations[0].lineId)!)}</td><td>{s.allocations.map(a => { const l = released.lines.find(line => line.id === a.lineId)!; return <div key={a.lineId}>{extractProductType(l.product, l.sku)} · {l.color} · {l.size} · ×{a.qty}{l.note.includes('★') ? ' · 加急' : ''}</div>; })}</td><td>{released.lines.find(l => l.id === s.allocations[0].lineId)?.orderId}</td></tr>)}</tbody></table></div>
-        <button disabled={!selectedPrint.length} onClick={() => void exportPdf('selected')}>只补打选中的标签（{selectedPrint.length}）</button><div className="bw-actions"><button disabled={(!frozen && (draft.lines.length > 0 || draft.labels.length > 0 || draft.pending.length > 0 || draft.screenshots.some(s => !s.reviewed))) || draft.history.some(b => b.revises === released.id)} onClick={() => { try { setDraft(reviseBatch(draft, released)); setUndo(null); setHistoryId(null); setStep(1); setMessage('已创建修订草稿。修改后重新发布，并重新打印受影响的文件；旧版仍保留在历史记录。'); } catch (error) { setMessage(String(error)); } }}>修改此批次（创建修订）</button></div><details><summary>文件生成记录（不代表实体打印完成）</summary><ul>{released.downloads.map((d, i) => <li key={i}>{new Date(d.at).toLocaleString()} · {d.kind}</li>)}</ul></details>
+        <button disabled={!selectedPrint.length} onClick={() => void exportPdf('selected')}>只补打选中的标签（{selectedPrint.length}）</button><details><summary>文件生成记录（不代表实体打印完成）</summary><ul>{released.downloads.map((d, i) => <li key={i}>{new Date(d.at).toLocaleString()} · {d.kind}</li>)}</ul></details>
       </> : <p>上传订单和标签后，点击“打印”即可。</p>}
     </section>}
     </fieldset>

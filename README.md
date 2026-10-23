@@ -112,3 +112,7 @@ HOMA sheets with `No.`, `Customer Name`, `SKU`, `Description`, `Product Size`, `
 Choose **手动添加订单**, then paste text or an image into **粘贴订单文字或截图**. Text uses **识别并填入**; clipboard images run English/Simplified Chinese OCR automatically (first use requires downloading models). Check/edit the populated fields and save to match uploaded labels. Enter one product at a time; use the same order ID for another item from that order. Missing quantities are not guessed. Multiple detected orders or explicitly listed products ask you to split the input rather than silently dropping items.
 
 Local HOMA fixture tests: set `HOMA_FIXTURES` to the directory containing the supplied HOMA spreadsheet and PDF. These customer files are not stored in Git.
+
+### Continue uploading or start over
+
+Viewing/printing results does not prevent more uploads or edits. Changes automatically create an internal revision while preserving all current inputs, and the next print regenerates the complete batch. Use **清空并重新上传** to reset the browser workspace, including local uploads and batch history; downloaded PDFs are unaffected. Saving is automatic. Manual save, undo, separate draft clearing and new-batch buttons are removed from the everyday interface.

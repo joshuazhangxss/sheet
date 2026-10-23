@@ -2,12 +2,12 @@ import { expect, test } from '@playwright/test';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { readFile } from 'node:fs/promises';
 
-async function labelPdf(ids: string[]): Promise<Buffer> {
+async function labelPdf(ids: string[], trackingOffset = 0): Promise<Buffer> {
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
   for (const [index, id] of ids.entries()) {
     const page = doc.addPage([288, 432]);
-    page.drawText(`SHIPPING LABEL\nOrder ${id}\nJane Smith\n100 Main Street\nLos Angeles CA 90210\nTracking TRACK00000${index + 1}`, { x: 20, y: 390, size: 12, font, lineHeight: 18 });
+    page.drawText(`SHIPPING LABEL\nOrder ${id}\nJane Smith\n100 Main Street\nLos Angeles CA 90210\nTracking TRACK00000${index + 1 + trackingOffset}`, { x: 20, y: 390, size: 12, font, lineHeight: 18 });
   }
   return Buffer.from(await doc.save());
 }
@@ -74,11 +74,29 @@ test('mixed intake, duplicate detection, release, ordered printing, refresh, and
   await page.getByRole('button', { name: '2 打印' }).click();
   await expect(page.locator('.bw table tbody tr')).toHaveCount(2);
   await page.screenshot({ path: testInfo.outputPath('print-center.png'), fullPage: true });
-  await page.getByRole('button', { name: '修改此批次（创建修订）' }).click();
-  await expect(page.getByRole('status')).toContainText('已创建修订草稿');
+  await page.getByRole('button', { name: '1 上传文件' }).click();
+  await expect(page.getByRole('button', { name: '选择文件，可多选' })).toBeEnabled();
+  await page.locator('.bw input[type=file]').setInputFiles([
+    { name: 'extra.pdf', mimeType: 'application/pdf', buffer: await labelPdf(['ORDER-003'], 2) },
+    { name: 'extra.csv', mimeType: 'text/csv', buffer: Buffer.from('order-id,product-name,quantity,size,color,seller\nORDER-003,Fence,1,5 x 10,Blue,Store A') },
+  ]);
+  await expect(page.getByRole('status')).toContainText('已处理 2 个文件');
   await page.getByRole('button', { name: '2 打印' }).click();
-
-  await expect(page.getByText(/数据已锁定 · 修订自/)).toBeVisible();
+  await expect(page.locator('.bw table tbody tr')).toHaveCount(3);
+  await page.getByRole('button', { name: '1 上传文件' }).click();
+  await page.getByRole('button', { name: '查看结果并打印 →' }).click();
+  await expect(page.locator('.bw table tbody tr')).toHaveCount(3);
+  await page.getByRole('button', { name: '清空并重新上传' }).click();
+  await expect(page.getByRole('status')).toContainText('已清空');
+  await expect(page.locator('.bw-save')).toContainText('已保存到此浏览器');
+  await page.reload();
+  await page.locator('.bw input[type=file]').setInputFiles([
+    { name: 'labels.pdf', mimeType: 'application/pdf', buffer: pdf },
+    { name: 'orders.csv', mimeType: 'text/csv', buffer: csv },
+  ]);
+  await expect(page.getByRole('status')).toContainText('已处理 2 个文件');
+  await page.getByRole('button', { name: '2 打印' }).click();
+  await expect(page.locator('.bw table tbody tr')).toHaveCount(2);
   expect(errors).toEqual([]);
 });
 
@@ -174,8 +192,7 @@ test('unknown seller columns are mapped and malformed quantities require correct
   await expect(page.getByText('无对应标签 · 已忽略', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '1 上传文件' }).click();
   await page.getByRole('button', { name: '移除此文件', exact: true }).click();
-  await page.getByText('管理', { exact: true }).click();
-  await page.getByRole('button', { name: '撤销上一步' }).click();
-  await page.getByRole('button', { name: '查看 / 修改订单' }).click();
-  await expect(page.getByText('NEW-ORDER-55', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '清空并重新上传' }).click();
+  await expect(page.getByRole('status')).toContainText('已清空');
+  await expect(page.getByRole('button', { name: '选择文件，可多选' })).toBeEnabled();
 });
