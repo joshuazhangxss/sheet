@@ -116,3 +116,9 @@ Local HOMA fixture tests: set `HOMA_FIXTURES` to the directory containing the su
 ### Continue uploading or start over
 
 Viewing/printing results does not prevent more uploads or edits. Changes automatically create an internal revision while preserving all current inputs, and the next print regenerates the complete batch. Use **清空并重新上传** to reset the browser workspace, including local uploads and batch history; downloaded PDFs are unaffected. Saving is automatic. Manual save, undo, separate draft clearing and new-batch buttons are removed from the everyday interface.
+
+### Daily order records
+
+Clicking **打印生产工作单** (including the download button in its preview) saves a separate daily snapshot after PDF generation succeeds. Preview alone does not save. The first snapshot uses the browser's local calendar date; subsequent prints compare against that day's latest saved version and offer **保存新版本并打印**, **只打印，不保存**, or **取消**. Differences show added/removed orders and changed product specifications, quantities, merchants and notes. Each version is a complete snapshot, not an addition to the day's previous total.
+
+Open **每日记录** to view dates, versions and order details. **清空并重新上传** preserves these records. Records are stored locally in this browser, not synchronized across computers; clearing browser site data removes them. Saving a PDF does not confirm physical printing. Daily saves use an atomic version check so concurrent browser tabs cannot silently overwrite a record.

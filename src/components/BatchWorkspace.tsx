@@ -6,6 +6,8 @@ import { detectMapping, importFields, readTables, screenshotPrefill, tableCanImp
 import type { ImportField } from '../lib/batchImport';
 import './BatchWorkspace.css';
 import { batchProductType } from '../lib/batchProductType';
+import { dailyRecords, localDate, recordChanges, recordOrders, saveDailyRecord } from '../lib/dailyRecords';
+import type { DailyRecord } from '../lib/dailyRecords';
 import { QuickOrderInput } from './QuickOrderInput';
 
 function AssetPreview({ asset, page = 1 }: { asset?: Asset; page?: number }) {
@@ -70,6 +72,14 @@ function ShipmentEditor({ shipment, lines, onSave }: { shipment: Shipment; lines
 }
 
 export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
+  const [records, setRecords] = useState<DailyRecord[]>([]);
+  const [showRecords, setShowRecords] = useState(false);
+  const [repeatPrint, setRepeatPrint] = useState<DailyRecord | null>(null);
+  const printLock = useRef(false);
+  const repeatDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (repeatPrint) repeatDialog.current?.showModal();
+  }, [repeatPrint]);
   const [draft, setDraft] = useState<BatchDraft>(emptyBatch);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState('');
@@ -220,10 +230,19 @@ export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
     } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(''); }
   }
-  async function exportPdf(kind: 'labels' | 'list' | 'worksheet' | 'selected', preview = false) {
-    if (!released) return;
+  async function exportPdf(kind: 'labels' | 'list' | 'worksheet' | 'selected', preview = false, decision?: 'save' | 'skip') {
+    if (!released || printLock.current) return;
+    printLock.current = true;
     setBusy('正在生成打印 PDF…');
     try {
+      const date = localDate();
+      let latest: DailyRecord | undefined;
+      if (kind === 'worksheet' && !preview) {
+        const existing = await dailyRecords();
+        setRecords(existing);
+        latest = existing.find(r => r.date === date);
+        if (latest && (!decision || latest.id !== repeatPrint?.id)) { setRepeatPrint(latest); return; }
+      }
       const { batchDocumentPdf, orderedLabelsPdf } = await import('../lib/batchPdf');
       const bytes = kind === 'labels' || kind === 'selected'
         ? await orderedLabelsPdf(released, draft.assets, kind === 'selected' ? selectedPrint : undefined)
@@ -233,25 +252,45 @@ export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
         setMessage('工作单预览与打印 PDF 使用相同版式。');
         return;
       }
+      if (kind === 'worksheet' && (decision !== 'skip' || !latest)) {
+        const saved = await saveDailyRecord(released, date, latest?.id ?? null);
+        setRecords(current => [saved, ...current]);
+      }
+      setRepeatPrint(null);
       const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }));
       const anchor = document.createElement('a');
       anchor.href = url; anchor.download = `${released.id.slice(0, 8)}-${kind}${kind === 'selected' ? `-${selectedPrint.map(i => i + 1).join('_')}` : ''}.pdf`; anchor.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
       setDraft(current => ({ ...current, history: current.history.map(b => b.id === released.id ? { ...b, downloads: [...b.downloads, { at: new Date().toISOString(), kind: kind === 'selected' ? `补打 ${selectedPrint.map(i => i + 1).join(', ')}` : kind }] } : b) }));
-      setMessage('PDF 已生成。打开文件后打印；运输标签请选择实际尺寸 100%。下载记录不代表已完成实体打印。');
+      setMessage(`PDF 已生成。${kind === 'worksheet' ? (decision === 'skip' && latest ? '本次未新增每日记录。' : '已保存每日订单记录。') : ''}打开文件后打印；运输标签请选择实际尺寸 100%。下载记录不代表已完成实体打印。`);
     } catch (error) { setMessage(`生成失败：${error instanceof Error ? error.message : String(error)}`); }
-    finally { setBusy(''); }
+    finally { printLock.current = false; setBusy(''); }
+  }
+  async function openRecords() {
+    try { setRecords(await dailyRecords()); setShowRecords(true); }
+    catch { setMessage('每日记录读取失败，请重试。'); }
   }
   if (!ready) return <main className="bw"><h1>仓库批次工作台</h1><p role="status">{displayedSaveStatus}</p>{loadError && <button onClick={() => window.location.reload()}>重新读取草稿</button>}</main>;
   return <main className="bw">
     <div className="bw-save"><span>{displayedSaveStatus}</span><div className="bw-actions">
-      <button disabled={Boolean(busy)} onClick={clearBatch} title="清空本地订单、上传文件和历史批次；不删除已下载的 PDF">清空并重新上传</button>
-      <details className="bw-more"><summary>更多</summary><button onClick={onAdvanced} disabled={Boolean(busy)}>高级工作台</button></details>
+      <button disabled={Boolean(busy)} onClick={clearBatch} title="清空当前批次；保留每日订单记录和已下载的 PDF">清空并重新上传</button>
+      <button disabled={Boolean(busy)} onClick={() => void openRecords()}>每日记录</button><details className="bw-more"><summary>更多</summary><button onClick={onAdvanced} disabled={Boolean(busy)}>高级工作台</button></details>
     </div></div>
     <nav className="bw-steps" aria-label="批次步骤">{[{ label: '上传文件', value: 0 }, { label: '打印', value: 3 }].map(({ label, value }, index) => <button disabled={Boolean(busy)} aria-current={(step === 1 ? 2 : step) === value ? 'step' : undefined} className={(step === 1 ? 2 : step) === value ? 'active' : ''} key={label} onClick={() => { if (value === 3 && !draft.releasedId) { if (!draft.releasedId && issues.length) setStep(2); else void release(); } else setStep(value); }}><span>{index + 1}</span>{label}</button>)}</nav>
     <div className="bw-shortcuts"><button onClick={() => setStep(1)}>查看 / 修改订单</button></div>
     <div className="bw-metrics"><div><strong>{new Set(activeLines.map(orderKey)).size}</strong><span>订单</span></div><div><strong>{activeLines.reduce((n, l) => n + l.qty, 0)}</strong><span>商品数量</span></div><div><strong>{shipments.length}</strong><span>运输标签</span></div></div>
     {(busy || message) && <p className="bw-message" role="status">{busy || message}</p>}
+    {repeatPrint && released && <dialog ref={repeatDialog} className="bw-daily-overlay" aria-label="当天工作单已保存" onCancel={event => { event.preventDefault(); if (!busy) setRepeatPrint(null); }}><section className="bw-card">
+      <h2>当天工作单已保存</h2><p>与 {repeatPrint.date} 第 {repeatPrint.version} 版比较，是否保存为新版本？旧版本会保留。</p>
+      {recordChanges(repeatPrint.batch, released).length ? <div className="bw-table-wrap"><table><thead><tr><th>变化</th><th>订单号</th><th>原记录</th><th>当前</th></tr></thead><tbody>{recordChanges(repeatPrint.batch, released).map(c => <tr key={c.key}><td>{c.kind}</td><td>{c.orderId}</td><td>{c.before}</td><td>{c.after}</td></tr>)}</tbody></table></div> : <p>订单内容没有变化。</p>}
+      <p>标签数量：{repeatPrint.batch.shipments.length} → {released.shipments.length}</p>
+      {message.startsWith('生成失败') && <p role="alert">{message}</p>}
+      <div className="bw-actions"><button disabled={Boolean(busy)} onClick={() => void exportPdf('worksheet', false, 'save')}>保存新版本并打印</button><button disabled={Boolean(busy)} onClick={() => void exportPdf('worksheet', false, 'skip')}>只打印，不保存</button><button disabled={Boolean(busy)} onClick={() => setRepeatPrint(null)}>取消</button></div>
+    </section></dialog>}
+    {showRecords && <section className="bw-card" aria-label="每日订单记录"><div className="bw-actions"><h2>每日订单记录</h2><button onClick={() => setShowRecords(false)}>关闭记录</button></div><p className="bw-muted">生成工作单 PDF 时保存，仅保存在当前浏览器；清空批次不会删除。记录不代表实体打印完成。</p>
+      {!records.length && <p>还没有记录，打印生产工作单后会自动保存。</p>}
+      {records.map(r => <details key={r.id}><summary>{r.date} · 第 {r.version} 版 · {recordOrders(r.batch).length} 单 · {new Date(r.savedAt).toLocaleTimeString()}</summary><ul>{recordOrders(r.batch).map(o => <li key={o.key}><strong>{o.orderId}</strong> · {o.merchant} · {o.text}</li>)}</ul></details>)}
+    </section>}
     <fieldset className="bw-content" disabled={Boolean(busy)}>
     {step === 0 && <>
       <section className="bw-card"><h2>上传文件</h2>

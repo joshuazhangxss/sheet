@@ -95,3 +95,8 @@
 @media (max-width: 760px) { .bw { padding: 12px; } .bw-save { flex-direction: row; align-items: center; } .bw-card, .bw-editor { padding: 16px; } }
 .bw-quick-entry { padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid #dce5e1; }
 .bw-quick-entry textarea { display: block; width: 100%; box-sizing: border-box; resize: vertical; padding: 12px; margin: 8px 0; border: 1px solid #cbd8d5; border-radius: 8px; background: white; }
+
+.bw-daily-overlay { border: 0; padding: 0; background: transparent; width: min(1100px, calc(100vw - 40px)); max-height: 85vh; }
+.bw-daily-overlay::backdrop { background: #10242688; }
+.bw-daily-overlay > section { width: min(1100px, 100%); max-height: 85vh; overflow: auto; box-sizing: border-box; }
+.bw-daily-overlay td { white-space: normal; overflow-wrap: anywhere; }
