@@ -106,7 +106,8 @@ test('labels first, manual entry, safe quantities, saved draft, and mobile layou
   await expect(page.getByRole('status')).toContainText('已处理 1 个文件');
   await page.getByRole('button', { name: '＋ 手动添加订单' }).click();
   await page.locator('input[name=orderId]').fill('MANUAL-99');
-  await page.locator('input[name=seller]').fill('Small account');
+  await expect(page.locator('.bw-editor input')).toHaveCount(5);
+  await expect(page.locator('input[name=seller]')).toHaveCount(0);
   await page.locator('input[name=product]').fill('Privacy fence');
   await page.locator('input[name=color]').fill('黑色');
   await page.locator('input[name=size]').fill('6 x 20');

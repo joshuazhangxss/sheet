@@ -30,7 +30,7 @@ test('manual pasted text fills editable matching fields', async ({ page }) => {
   await expect(page.locator('input[name=orderId]')).toHaveValue('123-1234567-1234567');
   await expect(page.locator('input[name=qty]')).toHaveValue('2');
   await expect(page.locator('input[name=size]')).toHaveValue('8 x 10');
-  await expect(page.locator('input[name=seller]')).toHaveValue('Test shop');
+  await expect(page.locator('input[name=seller]')).toHaveCount(0);
   await expect(page.locator('input[name=color]')).toHaveValue('棕色');
   await page.getByRole('button', {name:'确认并保存商品'}).click();
   await expect(page.locator('input[name=orderId]')).toHaveCount(0);

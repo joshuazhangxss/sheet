@@ -36,14 +36,13 @@ function OrderEditor({ initial, onSave, onCancel }: { initial: OrderLine; onSave
   return <form className="bw-editor" onSubmit={submit}>
     <QuickOrderInput onExtract={values => setLine(current => ({ ...current, ...values, id: current.id }))} />
     <h3>{initial.source === '手动录入' ? '添加 / 修改订单商品' : '核对订单商品'}</h3>
-    <p>一个表单是一件商品。同一订单的其他尺寸可继续添加，并使用相同账号与订单号。</p>
-    <div className="bw-form-grid">{(Object.keys(importFields) as ImportField[]).map(key => <label key={key}>
-      {importFields[key]} {['orderId', 'product', 'size', 'color', 'qty'].includes(key) ? '*' : ''}
+    <p>每次添加一个商品；同一订单的其他商品使用相同订单号。</p>
+    <div className="bw-form-grid">{(['orderId', 'product', 'size', 'color', 'qty'] as const).map(key => <label key={key}>
+      {importFields[key]} *
       <input name={key} value={line[key]} type={key === 'qty' ? 'number' : 'text'} min={key === 'qty' ? 1 : undefined} step={key === 'qty' ? 1 : undefined}
-        required={['orderId', 'product', 'size', 'color', 'qty'].includes(key)}
+        required
         onChange={e => setLine({ ...line, [key]: key === 'qty' ? Number(e.target.value) : e.target.value })} />
     </label>)}</div>
-    {(line.status || line.fulfillment || line.itemStatus) && <p>订单状态：{line.status || '未提供'} · 商品状态：{line.itemStatus || '未提供'} · 配送：{line.fulfillment || '未提供'}。保存表示已核对该订单可以生产。</p>}
     {error && <p role="alert" className="bw-error">{error}</p>}
     <div className="bw-actions"><button className="bw-primary" type="submit">确认并保存商品</button><button type="button" onClick={onCancel}>取消</button></div>
   </form>;
