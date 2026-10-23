@@ -71,3 +71,45 @@ test('pasted OCR text handles split fields, Unicode order IDs and rejects ambigu
   await page.getByRole('button', { name: '识别并填入', exact: true }).click();
   await expect(page.locator('input[name=qty]')).toHaveValue('0');
 });
+
+test('actual Amazon order text and screenshot extract production fields', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/');
+  await page.getByRole('button', { name: '＋ 手动添加订单' }).click();
+  const pasted = `33 minutes ago
+10/23/2026
+7:47 AM PDT
+113-9916925-0962656
+Buyer name:
+Noel
+Fulfillment method: Seller
+Sales channel: Amazon.com
+Sun Shade Sail Flat-Edged Square Outdoor with Durable Thick Air-Permeable UV Block Canopy Fabric Material for Garden, Patio, Swimming Pool, Backyard, Fence, Deck (Grey, 14' X 14')
+ASIN: B07S47J6YR
+SKU: SET_Grey1414
+Quantity: 1
+Item subtotal: $125.99
+Standard
+Ship by date: Mon, Oct 26, 2026 PDT
+Deliver by date: Mon, Nov 2, 2026 PST`;
+  await page.getByRole('textbox', { name: '粘贴订单文字或截图' }).fill(pasted);
+  await page.getByRole('button', { name: '识别并填入', exact: true }).click();
+  await expect(page.locator('input[name=orderId]')).toHaveValue('113-9916925-0962656');
+  await expect(page.locator('input[name=color]')).toHaveValue('灰色');
+  await expect(page.locator('input[name=qty]')).toHaveValue('1');
+  await expect(page.locator('input[name=size]')).toHaveValue(/14.*14/);
+  const screenshotPath = process.env.AMAZON_SCREENSHOT;
+  if (!screenshotPath) return;
+  const bytes = [...await readFile(screenshotPath)];
+  await page.locator('input[name=orderId]').fill('');
+  await page.getByRole('textbox', { name: '粘贴订单文字或截图' }).evaluate((element, bytes) => {
+    const data = new DataTransfer();
+    data.items.add(new File([new Uint8Array(bytes)], 'amazon.png', { type: 'image/png' }));
+    element.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data }));
+  }, bytes);
+  await expect(page.locator('input[name=orderId]')).toHaveValue('113-9916925-0962656', { timeout: 100_000 });
+  await expect(page.locator('input[name=color]')).toHaveValue('灰色');
+  await expect(page.locator('input[name=qty]')).toHaveValue('1');
+  await expect(page.locator('input[name=size]')).toHaveValue(/14.*14/);
+  await expect(page.locator('input[name=product]')).toHaveValue(/Flat.Edged/i);
+});

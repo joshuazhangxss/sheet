@@ -32,7 +32,7 @@ export async function recognizeOrderScreenshot(file: Blob): Promise<string> {
   const bitmap = await createImageBitmap(file);
   const canvas = document.createElement('canvas');
   try {
-    const scale = Math.min(bitmap.width < 1000 ? 2 : 1, 3000 / Math.max(bitmap.width, bitmap.height));
+    const scale = Math.min(bitmap.height < 300 ? 3 : bitmap.width < 1000 ? 2 : 1, 4500 / Math.max(bitmap.width, bitmap.height));
     canvas.width = Math.max(1, Math.round(bitmap.width * scale));
     canvas.height = Math.max(1, Math.round(bitmap.height * scale));
     const context = canvas.getContext('2d');

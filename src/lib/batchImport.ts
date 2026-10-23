@@ -115,8 +115,9 @@ export function quickOrderPrefill(text: string): Partial<OrderLine> {
   const explicitSize = value('size|尺寸');
   const explicitColor = value('color|colour|颜色');
   const product = value('product|item name|产品|title|product name|description|商品|商品名称|产品名称|标题') || base.product;
-  const inferredTitle = text.split(/\n/).map(s => s.trim()).find(s => s.length > 12 && !/^(?:order|tracking|quantity|qty|size|color|seller|store|sku|recipient|ship to|订单|数量|尺寸|颜色|追踪|运单|收件人)\b/i.test(s) && !/\d{3}-\d{7}-\d{7}/.test(s) && /shade|sail|fence|screen|canopy|遮阳|围栏|阳台|四角|三角/i.test(s));
+  const inferredTitle = text.split(/\n/).map(s => s.replace(/^.*?\b\d{3}-\d{7}-\d{7}\b\s*/, '').replace(/\s+(?:Standard|Expedited)\b.*$/i, '').trim()).find(s => s.length > 12 && !/^(?:order|tracking|quantity|qty|size|color|seller|store|sku|recipient|ship to|订单|数量|尺寸|颜色|追踪|运单|收件人)\b/i.test(s) && !/\d{3}-\d{7}-\d{7}/.test(s) && /shade|sail|fence|screen|canopy|遮阳|围栏|阳台|四角|三角/i.test(s));
+  const dimensionText = text.replace(/\b\d{1,2}\/\d{1,2}\/\d{4}\b/g, '').replace(/(\d)°(?=\s*[xX×])/g, "$1'");
   return { ...base, seller, sku, product: [product || inferredTitle || '', explicitType].filter(Boolean).join(' · '), orderId: ids[0] || labeledIds[0] || base.orderId, qty,
-    size: explicitSize || extractSize(text, sku), color: (explicitColor && (extractColor(explicitColor, '') || explicitColor)) || text.match(/棕色|米色|灰色|蓝色|黄色|绿色|黑色|白色|红色|橙色|紫色/)?.[0] || extractColor(text, sku),
+    size: explicitSize || extractSize(dimensionText, sku), color: (explicitColor && (extractColor(explicitColor, '') || explicitColor)) || text.match(/棕色|米色|灰色|蓝色|黄色|绿色|黑色|白色|红色|橙色|紫色/)?.[0] || extractColor(text, sku),
     note: value('note|notes|备注'), source: '粘贴录入', reviewed: false };
 }
