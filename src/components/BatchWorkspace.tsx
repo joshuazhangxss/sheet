@@ -5,6 +5,7 @@ import type { Asset, BatchDraft, OrderLine, Shipment } from '../lib/batchWorkflo
 import { detectMapping, importFields, readTables, screenshotPrefill, tableCanImport, tableToLines } from '../lib/batchImport';
 import type { ImportField } from '../lib/batchImport';
 import './BatchWorkspace.css';
+import { QuickOrderInput } from './QuickOrderInput';
 
 function AssetPreview({ asset, page = 1 }: { asset?: Asset; page?: number }) {
   const imageRef = useRef<HTMLImageElement>(null);
@@ -32,6 +33,7 @@ function OrderEditor({ initial, onSave, onCancel }: { initial: OrderLine; onSave
   }
   const [error, setError] = useState('');
   return <form className="bw-editor" onSubmit={submit}>
+    <QuickOrderInput onExtract={values => setLine(current => ({ ...current, ...values, id: current.id }))} />
     <h3>{initial.source === '手动录入' ? '添加 / 修改订单商品' : '核对订单商品'}</h3>
     <p>一个表单是一件商品。同一订单的其他尺寸可继续添加，并使用相同账号与订单号。</p>
     <div className="bw-form-grid">{(Object.keys(importFields) as ImportField[]).map(key => <label key={key}>

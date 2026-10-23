@@ -44,7 +44,9 @@ export function tableCanImport(table: PendingTable): boolean {
   return Boolean(table.mapping.product && table.mapping.qty && (table.mapping.orderId || (table.mapping.recipient && table.mapping.size)));
 }
 export function tableToLines(table: PendingTable): OrderLine[] {
-  const homa = !table.mapping.orderId && Boolean(table.mapping.recipient && table.mapping.size);
+  const homa = (!table.mapping.orderId && Boolean(table.mapping.recipient && table.mapping.size)) || Boolean(table.mapping.recipient && table.mapping.size && table.mapping.sku && table.records.some(record => Object.keys(record).some(h => normalize(h) === 'NO')));
+  let previousOrder = '';
+  let previousRecipient = '';
   let group = '';
   let recipient = '';
   return table.records.map((record, index) => {
@@ -53,7 +55,14 @@ export function tableToLines(table: PendingTable): OrderLine[] {
     for (const key of Object.keys(importFields) as ImportField[]) {
       if (key !== 'qty') line[key] = get(key);
     }
-    if (homa) {
+    if (homa && table.mapping.orderId) {
+      const numberHeader = Object.keys(record).find(h => normalize(h) === 'NO');
+      const continuation = numberHeader && !String(record[numberHeader]).trim() && !line.recipient && !line.orderId;
+      if (continuation) { line.orderId = previousOrder; line.recipient = previousRecipient; }
+      else { previousOrder = line.orderId; previousRecipient = line.recipient; }
+      line.seller ||= 'HOMA';
+    }
+    if (homa && !table.mapping.orderId) {
       const numberHeader = Object.keys(record).find(h => ['NO', '序号'].includes(normalize(h)));
       const number = numberHeader ? record[numberHeader].trim() : String(index + 1);
       if (number || !group) { group = number || String(index + 1); recipient = line.recipient; }
@@ -66,7 +75,8 @@ export function tableToLines(table: PendingTable): OrderLine[] {
     // Never silently turn an absent, fractional, or malformed quantity into one.
     line.qty = /^\d+$/.test(get('qty')) ? Number(get('qty')) : 0;
     line.size ||= extractSize(line.product, line.sku);
-    line.color ||= extractColor(line.product, line.sku);
+    line.color ||= line.product.match(/棕色|米色|灰色|蓝色|黄色|绿色|黑色|白色|红色|橙色|紫色/)?.[0] || extractColor(line.product, line.sku);
+    if (homa && line.size) line.size = extractSize(line.size, '') || line.size;
     const statusNeedsReview = /pending|cancel|shipped|取消|待处理|已发货/i.test(line.status) && !/unshipped/i.test(line.status);
     line.reviewed = !statusNeedsReview && !/amazon|afn/i.test(line.fulfillment) && !/cancel|取消/i.test(line.itemStatus);
     if (/expedited|priority|rush|加急/i.test(line.shippingService)) line.note = `★ 加急 ${line.note}`.trim();
@@ -83,4 +93,23 @@ export function screenshotPrefill(text: string): Partial<OrderLine> {
   const product = text.match(/(?:product|item name|产品)\s*[:：]\s*([^\n]+)/i)?.[1]?.trim() ?? '';
   return { orderId, tracking, recipient, product, qty: quantity ? Number(quantity) : 0,
     size: extractSize(text, ''), color: extractColor(text, ''), source: '截图录入', reviewed: false };
+}
+
+
+/** Pasted text and screenshot OCR share the same extraction rules. */
+export function quickOrderPrefill(text: string): Partial<OrderLine> {
+  const ids = [...new Set(text.match(/\b\d{3}-\d{7}-\d{7}\b/g) ?? [])];
+  if (ids.length > 1) throw new Error('检测到多个订单号，请每次粘贴一个订单商品。');
+  const value = (names: string) => text.match(new RegExp(`(?:^|\\n)\\s*(?:${names})\\s*[:：]\\s*([^\\n]+)`, 'i'))?.[1]?.trim() ?? '';
+  if ((text.match(/^(?:product|item name|product name|description|产品|商品名称|产品名称)\s*[:：]/gim) ?? []).length > 1) throw new Error('检测到多个商品，请每次粘贴一个商品，避免漏掉数量或尺寸。');
+  const base = screenshotPrefill(text);
+  const sku = value('sku|seller sku');
+  const seller = value('seller|store|shop|account|卖家|商家|店铺|账号');
+  const explicitSize = value('size|尺寸');
+  const explicitColor = value('color|colour|颜色');
+  const product = base.product || value('title|product name|description|商品|商品名称|产品名称|标题');
+  const inferredTitle = text.split(/\n/).map(s => s.trim()).find(s => s.length > 12 && !/^(?:order|tracking|quantity|qty|size|color|seller|store|sku|recipient|ship to|订单|数量|尺寸|颜色|追踪|运单|收件人)\b/i.test(s) && !/\d{3}-\d{7}-\d{7}/.test(s) && /shade|sail|fence|screen|canopy|遮阳|围栏|阳台|四角|三角/i.test(s));
+  return { ...base, seller, sku, product: product || inferredTitle || '',
+    size: explicitSize || extractSize(text, sku), color: explicitColor || text.match(/棕色|米色|灰色|蓝色|黄色|绿色|黑色|白色|红色|橙色|紫色/)?.[0] || extractColor(text, sku),
+    note: value('note|notes|备注'), source: '粘贴录入', reviewed: false };
 }

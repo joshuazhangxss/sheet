@@ -93,3 +93,5 @@
 .bw-drop strong { font-size: 17px; }
 .bw-shortcuts { margin-top: 8px; }
 @media (max-width: 760px) { .bw { padding: 12px; } .bw-save { flex-direction: row; align-items: center; } .bw-card, .bw-editor { padding: 16px; } }
+.bw-quick-entry { padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid #dce5e1; }
+.bw-quick-entry textarea { display: block; width: 100%; box-sizing: border-box; resize: vertical; padding: 12px; margin: 8px 0; border: 1px solid #cbd8d5; border-radius: 8px; background: white; }
