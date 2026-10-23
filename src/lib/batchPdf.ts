@@ -1,5 +1,6 @@
 import { PDFDocument, rgb } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
+import { extractProductType } from './orderProcessing';
 import { drawProductionSheet } from './productionPdf';
 import type { PDFFont, PDFPage } from 'pdf-lib';
 import { displayMerchant } from './batchWorkflow';
@@ -68,7 +69,7 @@ export async function batchDocumentPdf(batch: ReleasedBatch, kind: 'list' | 'wor
       if (y < 150) addPage();
       const first = byId.get(shipment.allocations[0].lineId)!;
       write(`${String(index + 1).padStart(3, '0')}  ${displayMerchant(first)}`, 14);
-      shipment.allocations.forEach(a => { const line = byId.get(a.lineId)!; write(`${line.color} · ${line.size} · ×${a.qty}${line.note.includes('★') ? ' · 加急' : ''}`); });
+      shipment.allocations.forEach(a => { const line = byId.get(a.lineId)!; write(`${extractProductType(line.product, line.sku)} · ${line.color} · ${line.size} · ×${a.qty}${line.note.includes('★') ? ' · 加急' : ''}`); });
       y -= 14;
     });
   }

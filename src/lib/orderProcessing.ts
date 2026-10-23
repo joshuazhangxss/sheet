@@ -784,11 +784,11 @@ export function extractColor(productName: string, sku: string): string {
 export function extractProductType(productName: string, sku: string): string {
   const combined = `${productName} ${sku}`.toLowerCase();
 
-  if (combined.includes('privacy screen') || combined.includes('privacy fence')) {
+  if (combined.includes('privacy screen') || combined.includes('privacy fence') || /隐私围栏|阳台网/.test(combined)) {
     return '隐私围栏';
   }
 
-  if (/\b(flat|straight)\b/i.test(combined)) {
+  if (/\b(flat|straight)\b|直边/i.test(combined)) {
     return '直边';
   }
 
