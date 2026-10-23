@@ -8,7 +8,11 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "smoke": "rm -rf .smoke-build && tsc --ignoreConfig scripts/sampleSmokeTest.ts --outDir .smoke-build --module commonjs --target es2023 --moduleResolution node --ignoreDeprecations 6.0 --jsx react-jsx --skipLibCheck --esModuleInterop --types node --lib ES2023,DOM && printf '{\"type\":\"commonjs\"}' > .smoke-build/package.json && node .smoke-build/scripts/sampleSmokeTest.js"
+    "smoke": "rm -rf .smoke-build && tsc --ignoreConfig scripts/sampleSmokeTest.ts --outDir .smoke-build --module commonjs --target es2023 --moduleResolution node --ignoreDeprecations 6.0 --jsx react-jsx --skipLibCheck --esModuleInterop --types node --lib ES2023,DOM && printf '{\"type\":\"commonjs\"}' > .smoke-build/package.json && node .smoke-build/scripts/sampleSmokeTest.js",
+    "test:batch": "tsx scripts/batchSmokeTest.ts",
+    "test:e2e": "playwright test",
+    "test:real": "playwright test tests/real-files.spec.ts",
+    "dev:test": "vite --host 127.0.0.1 --port 5183 --strictPort --open"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
@@ -18,10 +22,12 @@
     "pdfjs-dist": "^5.6.205",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "tesseract.js": "^7.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -30,8 +36,12 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.5.0",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
     "vite": "^8.0.10"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

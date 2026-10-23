@@ -499,6 +499,31 @@ function isHomaOrderRow(row: OrderRow): boolean {
   );
 }
 
+function getOriginalValueByAliases(row: OrderRow, aliases: string[]): string {
+  const aliasSet = new Set(aliases.map(normalizeSourceHeader));
+
+  for (const [header, value] of Object.entries(row.original)) {
+    if (aliasSet.has(normalizeSourceHeader(header)) && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return '';
+}
+
+function getCustomerName(row: OrderRow): string {
+  return getOriginalValueByAliases(row, [
+    'Customer Name',
+    'Name',
+    '客户',
+    '姓名',
+    'recipient-name',
+    'buyer-name',
+    'ship-to-name',
+    'ship-name',
+  ]);
+}
+
 function buildRowsFromLabelMatches(rows: OrderRow[], matches: LabelMatch[]): OrderRow[] {
   const rowsById = new Map(rows.map((row) => [row.id, row]));
   const orderedRows: OrderRow[] = [];
@@ -647,6 +672,48 @@ function App() {
   const masterOrderGroups = buildMasterOrderGroupSummaries(masterRows);
   const makerRows = buildMakerRows(masterRows);
   const makerColorGroups: MakerColorGroup[] = buildMakerColorGroups(makerRows);
+  const masterRowsBySourceId = new Map(masterRows.map((row) => [row.sourceRowId, row]));
+  const expeditedNameOptions = Array.from(
+    labelMatchedRows.reduce(
+      (groups, row) => {
+        const name = getCustomerName(row);
+
+        if (!name) {
+          return groups;
+        }
+
+        const key = name.toLocaleLowerCase();
+        const current = groups.get(key) ?? {
+          key,
+          name,
+          sourceRowIds: [] as string[],
+          rowCount: 0,
+          isRush: true,
+        };
+        const masterRow = masterRowsBySourceId.get(row.id);
+
+        current.sourceRowIds.push(row.id);
+        current.rowCount += 1;
+        current.isRush = current.isRush && Boolean(masterRow?.note.includes('★'));
+        groups.set(key, current);
+
+        return groups;
+      },
+      new Map<
+        string,
+        {
+          key: string;
+          name: string;
+          sourceRowIds: string[];
+          rowCount: number;
+          isRush: boolean;
+        }
+      >(),
+    ).values(),
+  ).sort((left, right) => left.name.localeCompare(right.name, undefined, {
+    sensitivity: 'base',
+    numeric: true,
+  }));
   const matchableOrderCount = new Set(
     workingRows.map((row) => row.amazonOrderId.trim() || row.id),
   ).size;
@@ -1119,6 +1186,17 @@ function App() {
 
       return next;
     });
+  }
+
+  function toggleExpeditedName(name: string, rowIds: string[], isRush: boolean) {
+    applyProductionOverrideToRows(rowIds, {
+      rush: isRush,
+    });
+    setStatusMessage(
+      isRush
+        ? `已将 ${name} 标记为加急，并同步到生产单。`
+        : `已取消 ${name} 的加急标记，并同步到生产单。`,
+    );
   }
 
   function appendParsedImports(
@@ -2039,6 +2117,42 @@ function App() {
             }}
             isParsing={isParsingLabels}
           />
+        ) : null}
+
+        {isLabelOrderMode && expeditedNameOptions.length > 0 ? (
+          <section className="section-card">
+            <div className="section-head">
+              <div>
+                <h2>按姓名标记加急</h2>
+                <p className="section-text">
+                  当前标签批次里每个姓名可单独勾选。勾选后，该姓名下所有匹配行都会显示 ★。
+                </p>
+              </div>
+            </div>
+
+            <div className="rush-name-grid">
+              {expeditedNameOptions.map((option) => (
+                <label
+                  key={option.key}
+                  className={`rush-name-option ${option.isRush ? 'is-active' : ''}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={option.isRush}
+                    onChange={(event) =>
+                      toggleExpeditedName(
+                        option.name,
+                        option.sourceRowIds,
+                        event.currentTarget.checked,
+                      )
+                    }
+                  />
+                  <span>{option.name}</span>
+                  <strong>{option.rowCount} 行</strong>
+                </label>
+              ))}
+            </div>
+          </section>
         ) : null}
 
         {hasImportedData && !hasLabelPages ? (

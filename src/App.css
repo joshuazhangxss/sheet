@@ -447,6 +447,50 @@
   color: #5b6876;
 }
 
+.rush-name-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.rush-name-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.rush-name-option input {
+  width: 18px;
+  height: 18px;
+  accent-color: #b85b00;
+}
+
+.rush-name-option span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.rush-name-option strong {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.rush-name-option.is-active {
+  border-color: #f0c47c;
+  background: #ffe7be;
+}
+
 .stack-cell {
   display: grid;
   gap: 4px;
