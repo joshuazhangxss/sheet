@@ -63,3 +63,15 @@ export async function saveDailyRecord(batch: ReleasedBatch, date: string, expect
     tx.onabort = tx.onerror = () => reject(new Error(conflict ? '当天记录已在其他页面更新，请重新点击打印查看最新变化。' : '每日记录保存失败，请检查浏览器空间后重试。'));
   }); } finally { db.close(); }
 }
+
+export function yesterdayDuplicates(batch: ReleasedBatch, records: DailyRecord[], now = new Date()) {
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const date = localDate(yesterday);
+  const normalize = (id: string) => id.trim().toUpperCase();
+  // Include every saved version: an order removed later may already have been printed.
+  const previous = new Set(records.filter(record => record.date === date)
+    .flatMap(record => recordOrders(record.batch).map(order => normalize(order.orderId))));
+  return [...new Set(recordOrders(batch).map(order => normalize(order.orderId)))]
+    .filter(id => id && previous.has(id));
+}

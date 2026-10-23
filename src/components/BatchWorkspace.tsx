@@ -6,7 +6,7 @@ import { detectMapping, importFields, readTables, screenshotPrefill, tableCanImp
 import type { ImportField } from '../lib/batchImport';
 import './BatchWorkspace.css';
 import { batchProductType } from '../lib/batchProductType';
-import { dailyRecords, localDate, recordChanges, recordOrders, saveDailyRecord } from '../lib/dailyRecords';
+import { dailyRecords, yesterdayDuplicates, localDate, recordChanges, recordOrders, saveDailyRecord } from '../lib/dailyRecords';
 import type { DailyRecord } from '../lib/dailyRecords';
 import { QuickOrderInput } from './QuickOrderInput';
 
@@ -254,11 +254,20 @@ export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
     try {
       const date = localDate();
       let latest: DailyRecord | undefined;
+      const existing = preview ? [] : await dailyRecords();
       if (kind === 'worksheet' && !preview) {
-        const existing = await dailyRecords();
         setRecords(existing);
         latest = existing.find(r => r.date === date);
         if (latest && (!decision || latest.id !== repeatPrint?.id)) { setRepeatPrint(latest); return; }
+      }
+      if (!preview) {
+        const printing = kind === 'selected' ? { ...released, shipments: released.shipments.filter((_, index) => selectedPrint.includes(index)) } : released;
+        const duplicates = yesterdayDuplicates(printing, existing);
+        if (duplicates.length && !window.confirm(`发现 ${duplicates.length} 个订单与昨天已保存的记录重复：\n\n${duplicates.join('\n')}\n\n请检查是否误上传了昨天的文件。\n点击“取消”停止打印并检查文件；只有确定需要补打时才点击“确定”继续。`)) {
+          setMessage('已取消打印，请检查上传文件是否为今天的订单。');
+          setRepeatPrint(null);
+          return;
+        }
       }
       const { batchDocumentPdf, orderedLabelsPdf } = await import('../lib/batchPdf');
       const bytes = kind === 'labels' || kind === 'selected'

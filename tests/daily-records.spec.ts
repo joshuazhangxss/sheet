@@ -84,3 +84,41 @@ test('atomic daily versions and comparison ignores source ids', async ({ page })
   expect(result.added[0].kind).toBe('新增');
   expect(result.date).toBe('2026-10-22');
 });
+
+test('yesterday duplicate warning cancels printing without saving today', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const workflowPath = '/src/lib/batchWorkflow.ts';
+    const dailyPath = '/src/lib/dailyRecords.ts';
+    const { emptyBatch, emptyLine, saveDraft } = await import(/* @vite-ignore */ workflowPath);
+    const { localDate, saveDailyRecord, yesterdayDuplicates } = await import(/* @vite-ignore */ dailyPath);
+    const line = { ...emptyLine(), id: 'line', orderId: 'ORDER-YESTERDAY', product: 'Fence', color: 'Green', size: '4 x 10', qty: 1 };
+    const batch = { id: 'released', createdAt: new Date().toISOString(), lines: [line], shipments: [{ label: { id: 'label' }, allocations: [{ lineId: 'line', qty: 1 }] }], downloads: [] };
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+    const saved = await saveDailyRecord(batch, localDate(yesterday), null);
+    const changedSeller = structuredClone(batch); changedSeller.lines[0].seller = 'Renamed seller';
+    if (yesterdayDuplicates(changedSeller, [saved]).length !== 1) throw new Error('Seller rename bypassed duplicate check');
+    const draft = emptyBatch(); draft.history = [batch]; draft.releasedId = batch.id;
+    await saveDraft(draft);
+  });
+  await page.reload();
+  await page.getByRole('button', { name: '2 打印', exact: true }).click();
+  let downloads = 0;
+  page.on('download', () => downloads++);
+  const warning = page.waitForEvent('dialog');
+  const click = page.getByRole('button', { name: '3. 打印生产工作单', exact: true }).click();
+  const dialog = await warning;
+  expect(dialog.message()).toContain('ORDER-YESTERDAY');
+  expect(dialog.message()).toContain('昨天');
+  await dialog.dismiss();
+  await click;
+  await expect(page.getByRole('status')).toContainText('已取消打印');
+  await page.getByRole('button', { name: '每日记录', exact: true }).click();
+  await expect(page.getByRole('region', { name: '每日订单记录' }).locator('details')).toHaveCount(1);
+  expect(downloads).toBe(0);
+  page.once('dialog', dialog => dialog.accept());
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: '3. 打印生产工作单', exact: true }).click();
+  await download;
+  await expect(page.getByRole('region', { name: '每日订单记录' }).locator('details')).toHaveCount(2);
+});
