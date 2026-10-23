@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { batchProblems, displayMerchant, labelOrderLines, emptyBatch, emptyLine, fingerprint, lineProblems, loadDraft, orderKey, releaseBatch, saveDraft, suggestShipments } from '../lib/batchWorkflow';
-import type { Asset, BatchDraft, OrderLine, Shipment } from '../lib/batchWorkflow';
+import type { Asset, BatchDraft, OrderLine, Shipment, ReleasedBatch } from '../lib/batchWorkflow';
 import { detectMapping, importFields, readTables, screenshotPrefill, tableCanImport, tableToLines } from '../lib/batchImport';
 import type { ImportField } from '../lib/batchImport';
 import './BatchWorkspace.css';
@@ -9,6 +9,23 @@ import { batchProductType } from '../lib/batchProductType';
 import { dailyRecords, localDate, recordChanges, recordOrders, saveDailyRecord } from '../lib/dailyRecords';
 import type { DailyRecord } from '../lib/dailyRecords';
 import { QuickOrderInput } from './QuickOrderInput';
+
+function DailyRecordTable({ batch }: { batch: ReleasedBatch }) {
+  const rows = batch.shipments.flatMap((shipment, index) => shipment.allocations.map(allocation => ({
+    number: index + 1,
+    line: batch.lines.find(line => line.id === allocation.lineId)!,
+    qty: allocation.qty,
+  })));
+  const hasNotes = rows.some(row => row.line.note.trim());
+  return <div className="bw-table-wrap bw-record-grid"><table aria-label="已保存订单明细">
+    <thead><tr><th>序号</th><th>订单号</th><th>商家 / 品牌</th><th>类型</th><th>颜色</th><th>尺寸</th><th>数量</th>{hasNotes && <th>备注</th>}</tr></thead>
+    <tbody>{rows.map((row, index) => <tr key={index}>
+      <td>{String(row.number).padStart(3, '0')}</td><td>{row.line.orderId}</td><td>{displayMerchant(row.line)}</td>
+      <td>{batchProductType(row.line)}</td><td>{row.line.color}</td><td>{row.line.size}</td><td className="bw-record-qty">{row.qty}</td>
+      {hasNotes && <td className="bw-record-note">{row.line.note || '—'}</td>}
+    </tr>)}</tbody>
+  </table></div>;
+}
 
 function AssetPreview({ asset, page = 1 }: { asset?: Asset; page?: number }) {
   const imageRef = useRef<HTMLImageElement>(null);
@@ -289,7 +306,7 @@ export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
     </section></dialog>}
     {showRecords && <section className="bw-card" aria-label="每日订单记录"><div className="bw-actions"><h2>每日订单记录</h2><button onClick={() => setShowRecords(false)}>关闭记录</button></div><p className="bw-muted">生成工作单 PDF 时保存，仅保存在当前浏览器；清空批次不会删除。记录不代表实体打印完成。</p>
       {!records.length && <p>还没有记录，打印生产工作单后会自动保存。</p>}
-      {records.map(r => <details key={r.id}><summary>{r.date} · 第 {r.version} 版 · {recordOrders(r.batch).length} 单 · {new Date(r.savedAt).toLocaleTimeString()}</summary><ul>{recordOrders(r.batch).map(o => <li key={o.key}><strong>{o.orderId}</strong> · {o.merchant} · {o.text}</li>)}</ul></details>)}
+      {records.map(r => <details key={r.id}><summary>{r.date} · 第 {r.version} 版 · {recordOrders(r.batch).length} 单 · {new Date(r.savedAt).toLocaleTimeString()}</summary><DailyRecordTable batch={r.batch} /></details>)}
     </section>}
     <fieldset className="bw-content" disabled={Boolean(busy)}>
     {step === 0 && <>

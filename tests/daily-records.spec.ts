@@ -51,7 +51,9 @@ test('daily worksheet history, repeat choices, differences and clear persistence
   await page.getByRole('button', { name: '每日记录', exact: true }).click();
   await expect(history.locator('details')).toHaveCount(2);
   await history.locator('summary').last().click();
-  await expect(history.locator('details').last()).toContainText('×1');
+  await expect(history.locator('details').last().getByRole('table')).toBeVisible();
+  await expect(history.locator('details').last().locator('tbody tr')).toHaveCount(1);
+  await expect(history.locator('details').last().locator('.bw-record-qty')).toHaveText('1');
 });
 
 test('atomic daily versions and comparison ignores source ids', async ({ page }) => {

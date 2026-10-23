@@ -100,3 +100,12 @@
 .bw-daily-overlay::backdrop { background: #10242688; }
 .bw-daily-overlay > section { width: min(1100px, 100%); max-height: 85vh; overflow: auto; box-sizing: border-box; }
 .bw-daily-overlay td { white-space: normal; overflow-wrap: anywhere; }
+
+.bw-record-grid { max-height: 560px; overflow: auto; margin: 10px 0 18px; }
+.bw .bw-record-grid table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.4; }
+.bw .bw-record-grid th, .bw .bw-record-grid td { border: 1px solid #d5dfdc; padding: 7px 10px; white-space: nowrap; }
+.bw .bw-record-grid th { position: sticky; top: 0; background: #edf3f0; z-index: 1; }
+.bw .bw-record-grid tbody tr:nth-child(even) { background: #f7faf8; }
+.bw .bw-record-grid tbody tr:hover { background: #eaf3ee; }
+.bw .bw-record-grid .bw-record-qty { font-weight: 700; text-align: center; }
+.bw .bw-record-grid .bw-record-note { white-space: normal; min-width: 120px; max-width: 240px; overflow-wrap: anywhere; }
