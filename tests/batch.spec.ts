@@ -32,8 +32,8 @@ test('mixed intake, duplicate detection, release, ordered printing, refresh, and
   await expect(page.getByRole('heading', { name: '打印中心' })).toBeVisible();
   const rows = page.locator('.bw table tbody tr');
   await expect(rows.nth(0)).toContainText('001');
-  await expect(rows.nth(0)).toContainText('Green');
-  await expect(rows.nth(1)).toContainText('Black');
+  await expect(rows.nth(0)).toContainText('Black');
+  await expect(rows.nth(1)).toContainText('Green');
   for (const name of ['打印全部标签 PDF', '2. 打印顺序对照单', '3. 打印生产工作单']) {
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name, exact: true }).click();

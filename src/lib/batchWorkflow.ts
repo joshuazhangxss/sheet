@@ -14,7 +14,7 @@ export type Shipment = { label: BatchLabel; allocations: Allocation[]; confirmed
 export type Asset = { id: string; name: string; file: Blob };
 export type PendingTable = { id: string; name: string; records: Record<string, string>[]; mapping: Record<string, string> };
 export type Screenshot = { id: string; assetId: string; text: string; reviewed: boolean; lineIds?: string[] };
-export type ReleasedBatch = { id: string; revises?: string; createdAt: string; lines: OrderLine[]; shipments: Shipment[]; downloads: { at: string; kind: string }[] };
+export type ReleasedBatch = { labelOrder?: 'upload'; id: string; revises?: string; createdAt: string; lines: OrderLine[]; shipments: Shipment[]; downloads: { at: string; kind: string }[] };
 export type BatchDraft = {
   version: 1; id: string; revises?: string; lines: OrderLine[]; labels: BatchLabel[]; assignments: Record<string, Assignment>;
   assets: Asset[]; pending: PendingTable[]; screenshots: Screenshot[]; history: ReleasedBatch[];
@@ -135,12 +135,10 @@ export function releaseBatch(draft: BatchDraft): ReleasedBatch {
   const shipments = suggestShipments(draft.lines, draft.labels, draft.assignments);
   const problems = batchProblems(draft, shipments);
   if (problems.length) throw new Error(problems.join('\n'));
-  shipments.sort((a, b) => {
-    const left = draft.lines.find(l => l.id === a.allocations[0].lineId)!;
-    const right = draft.lines.find(l => l.id === b.allocations[0].lineId)!;
-    return `${left.seller} ${left.orderId}`.localeCompare(`${right.seller} ${right.orderId}`, undefined, { numeric: true }) || a.label.id.localeCompare(b.label.id);
-  });
-  return structuredClone({ id: draft.id, revises: draft.revises, createdAt: new Date().toISOString(), lines: labelOrderLines(draft.lines, shipments), shipments, downloads: [] });
+  const fileOrder = new Map<string, number>();
+  for (const label of draft.labels) if (!fileOrder.has(label.assetId)) fileOrder.set(label.assetId, fileOrder.size);
+  shipments.sort((a, b) => fileOrder.get(a.label.assetId)! - fileOrder.get(b.label.assetId)! || a.label.pageNumber - b.label.pageNumber);
+  return structuredClone({ labelOrder: 'upload' as const, id: draft.id, revises: draft.revises, createdAt: new Date().toISOString(), lines: labelOrderLines(draft.lines, shipments), shipments, downloads: [] });
 }
 export async function fingerprint(blob: Blob): Promise<string> {
   const bytes = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
@@ -179,7 +177,11 @@ export async function saveDraft(draft: BatchDraft): Promise<void> {
 export function reviseBatch(draft: BatchDraft, batch: ReleasedBatch): BatchDraft {
   if (draft.history.some(b => b.revises === batch.id)) throw new Error('此版本已有修订，请选择最新版本');
   return { ...emptyBatch(), revises: batch.id, assets: draft.assets, history: draft.history,
-    lines: structuredClone(batch.lines), labels: structuredClone(batch.shipments.map(s => s.label)),
+    lines: structuredClone(batch.lines), labels: structuredClone(batch.shipments.map(s => s.label).sort((a, b) => {
+      const uploadFiles = [...new Set(draft.labels.map(label => label.assetId))];
+      const rank = (assetId: string) => uploadFiles.includes(assetId) ? uploadFiles.indexOf(assetId) : uploadFiles.length + draft.assets.findIndex(asset => asset.id === assetId);
+      return rank(a.assetId) - rank(b.assetId) || a.pageNumber - b.pageNumber;
+    })),
     assignments: Object.fromEntries(batch.shipments.map(s => [s.label.id, { allocations: structuredClone(s.allocations), confirmed: true }])),
   };
 }

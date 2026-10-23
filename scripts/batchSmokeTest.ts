@@ -109,3 +109,7 @@ assert.equal(workerRows.filter(r => !r.orderMarker).reduce((n, r) => n + r.qty, 
 const secondGroup = line('four', { orderId: 'OTHER-MULTI', qty: 2 });
 const letterRows = productionColumns({ ...workerBatch, lines: [...workerBatch.lines, secondGroup], shipments: [...workerBatch.shipments, { ...released.shipments[0], allocations: [{ lineId: secondGroup.id, qty: 2 }] }] }).flatMap(c => c.rows);
 assert.equal(letterRows.some(r => r.orderMarker === 'ⓑ'), false, 'multiple identical units do not receive a marker');
+
+const uploadOrder = releaseBatch({ ...emptyBatch(), lines: [a, b], labels: [{ ...label('second-order', b.orderId), assetId: 'first-upload' }, { ...label('first-order', a.orderId), assetId: 'second-upload' }] });
+assert.deepEqual(uploadOrder.shipments.map(s => s.allocations[0].lineId), [b.id, a.id]);
+assert.equal(uploadOrder.labelOrder, 'upload');
