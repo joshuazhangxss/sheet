@@ -52,3 +52,22 @@ test('clipboard screenshot OCR fills the manual order fields', async ({ page }) 
   await expect(page.locator('input[name=qty]')).toHaveValue('2');
   await expect(page.locator('input[name=product]')).toHaveValue('Brown Shade Sail');
 });
+
+test('pasted OCR text handles split fields, Unicode order IDs and rejects ambiguity', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '＋ 手动添加订单' }).click();
+  const text = page.getByRole('textbox', { name: '粘贴订单文字或截图' });
+  await text.fill('订单编号：１２３ – １２３４５６７ – １２３４５６７\n商品名称\nShade Sail\n尺寸\n6 x 20\n颜色\nBrown\n数量\n2 件\n类型：直边加环');
+  await page.getByRole('button', { name: '识别并填入', exact: true }).click();
+  await expect(page.locator('input[name=orderId]')).toHaveValue('123-1234567-1234567');
+  await expect(page.locator('input[name=qty]')).toHaveValue('2');
+  await expect(page.locator('input[name=color]')).toHaveValue('棕色');
+  await expect(page.locator('input[name=product]')).toHaveValue('Shade Sail · 直边加环');
+  await expect(page.locator('input[name=size]')).toHaveValue('6 x 20');
+  await text.fill('Order ID: SHOP-1234\nOrder ID: SHOP-5678\nProduct: Shade Sail');
+  await page.getByRole('button', { name: '识别并填入', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('多个订单号');
+  await text.fill('Order ID: SHOP-1234\nProduct: Shade Sail\nQuantity: 1.5');
+  await page.getByRole('button', { name: '识别并填入', exact: true }).click();
+  await expect(page.locator('input[name=qty]')).toHaveValue('0');
+});

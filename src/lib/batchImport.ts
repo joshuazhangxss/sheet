@@ -98,18 +98,25 @@ export function screenshotPrefill(text: string): Partial<OrderLine> {
 
 /** Pasted text and screenshot OCR share the same extraction rules. */
 export function quickOrderPrefill(text: string): Partial<OrderLine> {
+  text = text.normalize('NFKC').replace(/\r\n?/g, '\n').replace(/[‐‑‒–—−]/g, '-')
+    .replace(/(\d{3})\s*-\s*(\d{7})\s*-\s*(\d{7})/g, '$1-$2-$3');
   const ids = [...new Set(text.match(/\b\d{3}-\d{7}-\d{7}\b/g) ?? [])];
   if (ids.length > 1) throw new Error('检测到多个订单号，请每次粘贴一个订单商品。');
-  const value = (names: string) => text.match(new RegExp(`(?:^|\\n)\\s*(?:${names})\\s*[:：]\\s*([^\\n]+)`, 'i'))?.[1]?.trim() ?? '';
+  const value = (names: string) => text.match(new RegExp(`(?:^|\\n)\\s*(?:${names})[ \\t]*(?:[:：][ \\t]*(?:\\n[ \\t]*)?|\\n[ \\t]*)([^\\n]+)`, 'i'))?.[1]?.trim() ?? '';
   if ((text.match(/^(?:product|item name|product name|description|产品|商品名称|产品名称)\s*[:：]/gim) ?? []).length > 1) throw new Error('检测到多个商品，请每次粘贴一个商品，避免漏掉数量或尺寸。');
   const base = screenshotPrefill(text);
+  const labeledIds = [...text.matchAll(/(?:^|\n)\s*(?:order\s*(?:number|no\.?|id|#)|订单号|订单编号)[ \t]*[:：#]?[ \t]*(?:\n[ \t]*)?([A-Z0-9][A-Z0-9-]{3,})/gi)].map(match => match[1].toUpperCase());
+  if (new Set([...ids, ...labeledIds]).size > 1) throw new Error('检测到多个订单号，请每次粘贴一个订单商品。');
+  const quantity = value('quantity|qty|数量|购买数量|订购数量');
+  const qty = quantity ? (/^\d+(?:\s*(?:件|个|pcs?))?$/i.test(quantity) ? parseInt(quantity, 10) : 0) : base.qty;
+  const explicitType = value('type|style|类型|款式');
   const sku = value('sku|seller sku');
   const seller = value('seller|store|shop|account|卖家|商家|店铺|账号');
   const explicitSize = value('size|尺寸');
   const explicitColor = value('color|colour|颜色');
-  const product = base.product || value('title|product name|description|商品|商品名称|产品名称|标题');
+  const product = value('product|item name|产品|title|product name|description|商品|商品名称|产品名称|标题') || base.product;
   const inferredTitle = text.split(/\n/).map(s => s.trim()).find(s => s.length > 12 && !/^(?:order|tracking|quantity|qty|size|color|seller|store|sku|recipient|ship to|订单|数量|尺寸|颜色|追踪|运单|收件人)\b/i.test(s) && !/\d{3}-\d{7}-\d{7}/.test(s) && /shade|sail|fence|screen|canopy|遮阳|围栏|阳台|四角|三角/i.test(s));
-  return { ...base, seller, sku, product: product || inferredTitle || '',
-    size: explicitSize || extractSize(text, sku), color: explicitColor || text.match(/棕色|米色|灰色|蓝色|黄色|绿色|黑色|白色|红色|橙色|紫色/)?.[0] || extractColor(text, sku),
+  return { ...base, seller, sku, product: [product || inferredTitle || '', explicitType].filter(Boolean).join(' · '), orderId: ids[0] || labeledIds[0] || base.orderId, qty,
+    size: explicitSize || extractSize(text, sku), color: (explicitColor && (extractColor(explicitColor, '') || explicitColor)) || text.match(/棕色|米色|灰色|蓝色|黄色|绿色|黑色|白色|红色|橙色|紫色/)?.[0] || extractColor(text, sku),
     note: value('note|notes|备注'), source: '粘贴录入', reviewed: false };
 }

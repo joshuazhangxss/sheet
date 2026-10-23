@@ -19,10 +19,9 @@ export function QuickOrderInput({ onExtract }: { onExtract: (values: Partial<Ord
     const reader = new FileReader();
     reader.onload = () => setImage(String(reader.result)); reader.readAsDataURL(file);
     try {
-      const { createWorker } = await import('tesseract.js');
-      const worker = await createWorker(['eng', 'chi_sim']);
-      try { const result = (await worker.recognize(file)).data.text; setText(result); extract(result); }
-      finally { await worker.terminate(); }
+      const { recognizeOrderScreenshot } = await import('../lib/batchOcr');
+      const result = await recognizeOrderScreenshot(file);
+      setText(result); extract(result);
     } catch { setError('截图识别失败，可粘贴文字或直接填写下方信息。'); }
     finally { setBusy(false); }
   }

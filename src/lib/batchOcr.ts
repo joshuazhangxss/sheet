@@ -26,3 +26,22 @@ export async function recognizeLabelPages(file: File, pages: LabelPage[], progre
     } finally { await worker.terminate(); }
   } finally { await pdf.destroy(); }
 }
+
+// Enlarge small clipboard text and flatten transparency before OCR.
+export async function recognizeOrderScreenshot(file: Blob): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const canvas = document.createElement('canvas');
+  try {
+    const scale = Math.min(bitmap.width < 1000 ? 2 : 1, 3000 / Math.max(bitmap.width, bitmap.height));
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('无法读取截图');
+    context.fillStyle = 'white'; context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const { createWorker } = await import('tesseract.js');
+    const worker = await createWorker(['eng', 'chi_sim']);
+    try { return (await worker.recognize(canvas)).data.text; }
+    finally { await worker.terminate(); }
+  } finally { bitmap.close(); canvas.width = 0; canvas.height = 0; }
+}
