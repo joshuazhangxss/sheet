@@ -1,5 +1,6 @@
+import { batchProductType } from './batchProductType';
 import { PDFDocument, rgb, type PDFFont } from 'pdf-lib';
-import { extractProductType, isPrivacyFenceType } from './orderProcessing';
+import { isPrivacyFenceType } from './orderProcessing';
 import type { ReleasedBatch } from './batchWorkflow';
 
 type Row = { size: string; note: string; qty: number; orderMarker: string; sectionTitle?: string };
@@ -23,11 +24,13 @@ export function productionColumns(batch: ReleasedBatch) {
   for (const shipment of batch.shipments) for (const allocation of shipment.allocations) {
     const line = lines.get(allocation.lineId);
     if (!line) throw new Error('生产工作单缺少订单明细');
-    const type = extractProductType(line.product, line.sku);
+    const type = batchProductType(line);
     const privacy = isPrivacyFenceType(type);
     const title = `${line.color}${privacy ? '（阳）' : ''}`;
     const column = columns.get(title) ?? { title, privacy, rows: new Map<string, Row>() };
-    const note = [type === '直边' && !line.note.includes('直') ? '直' : '', line.note].filter(Boolean).join(' ');
+    const mark = type === '直边加环' ? '直+环' : type === '直边' ? '直' : '';
+    const remainingNote = mark ? line.note.replace(/直边加环|直边|直\s*[+＋]\s*环|加环|打环|(?:^|\s)[直环](?=\s|$)/g, ' ').trim() : line.note;
+    const note = [mark, remainingNote].filter(Boolean).join(' ');
     const orderKey = JSON.stringify([line.seller, line.orderId]);
     const orderMarker = orderNumbers.has(orderKey) ? Array.from({ length: Math.floor(orderNumbers.get(orderKey)! / 26) + 1 }, () => String.fromCodePoint(0x24d0 + orderNumbers.get(orderKey)! % 26)).join('') : '';
     const key = JSON.stringify([line.size, note, orderMarker]);

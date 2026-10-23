@@ -113,3 +113,13 @@ assert.equal(letterRows.some(r => r.orderMarker === 'ⓑ'), false, 'multiple ide
 const uploadOrder = releaseBatch({ ...emptyBatch(), lines: [a, b], labels: [{ ...label('second-order', b.orderId), assetId: 'first-upload' }, { ...label('first-order', a.orderId), assetId: 'second-upload' }] });
 assert.deepEqual(uploadOrder.shipments.map(s => s.allocations[0].lineId), [b.id, a.id]);
 assert.equal(uploadOrder.labelOrder, 'upload');
+
+const { batchProductType } = await import('../src/lib/batchProductType');
+assert.equal(batchProductType(line('edge', { product:'Straight edge shade sail with grommets', note:'' })), '直边加环');
+assert.equal(batchProductType(line('edge', { product:'直边加环遮阳网', note:'' })), '直边加环');
+assert.equal(batchProductType(line('edge', { product:'Shade Sail', note:'直+环' })), '直边加环');
+assert.equal(batchProductType(line('edge', { product:'Straight edge shade sail', note:'' })), '直边');
+assert.equal(batchProductType(line('edge', { product:'Privacy fence with grommets', note:'' })), '隐私围栏');
+const ringLine = line('ring', {product:'Straight edge shade sail with grommets', note:''});
+const ringBatch = { ...released, lines:[ringLine], shipments:[{...released.shipments[0],allocations:[{lineId:ringLine.id,qty:1}]}] };
+assert.equal(productionColumns(ringBatch)[0].rows[0].note, '直+环');
