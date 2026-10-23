@@ -197,3 +197,24 @@ test('unknown seller columns are mapped and malformed quantities require correct
   await expect(page.getByRole('status')).toContainText('已清空');
   await expect(page.getByRole('button', { name: '选择文件，可多选' })).toBeEnabled();
 });
+
+test('manual information first automatically matches a later label upload', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '＋ 手动添加订单' }).click();
+  for (const [name, value] of Object.entries({ orderId: 'MANUAL-FIRST-01', product: 'Straight Flat-Edged Shade Sail', color: '棕色', size: '6 x 20', qty: '2' })) {
+    await page.locator(`input[name=${name}]`).fill(value);
+  }
+  await page.getByRole('button', { name: '确认并保存商品' }).click();
+  await expect(page.locator('.bw-save')).toContainText('已保存到此浏览器');
+  await page.reload();
+  await page.locator('.bw input[type=file]').setInputFiles({ name: 'later-label.pdf', mimeType: 'application/pdf', buffer: await labelPdf(['MANUAL-FIRST-01']) });
+  await expect(page.getByRole('status')).toContainText('已处理 1 个文件');
+  await page.getByRole('button', { name: '查看结果并打印 →' }).click();
+  await expect(page.getByRole('heading', { name: '打印中心' })).toBeVisible();
+  const rows = page.locator('.bw table tbody tr');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('MANUAL-FIRST-01');
+  await expect(rows.first()).toContainText('棕色');
+  await expect(rows.first()).toContainText('×2');
+  await expect(rows.first()).toContainText('直边');
+});
