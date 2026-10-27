@@ -42,7 +42,7 @@ function AssetPreview({ asset, page = 1 }: { asset?: Asset; page?: number }) {
     : <iframe className="bw-pdf" title={`标签预览 ${asset.name}`} ref={frameRef} />;
 }
 
-function OrderEditor({ initial, onSave, onCancel }: { initial: OrderLine; onSave: (line: OrderLine) => void; onCancel: () => void }) {
+function OrderEditor({ initial, onSave, onAddMany, onCancel }: { initial: OrderLine; onSave: (line: OrderLine) => void; onAddMany: (lines: OrderLine[]) => void; onCancel: () => void }) {
   const [line, setLine] = useState(initial);
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -53,7 +53,7 @@ function OrderEditor({ initial, onSave, onCancel }: { initial: OrderLine; onSave
   }
   const [error, setError] = useState('');
   return <form className="bw-editor" onSubmit={submit}>
-    <QuickOrderInput onExtract={values => setLine(current => ({ ...current, ...values, id: current.id }))} />
+    <QuickOrderInput onAddMany={onAddMany} onExtract={values => setLine(current => ({ ...current, ...values, id: current.id }))} />
     <h3>{initial.source === '手动录入' ? '添加 / 修改订单商品' : '核对订单商品'}</h3>
     <p>每次添加一个商品；同一订单的其他商品使用相同订单号。</p>
     <div className="bw-form-grid">{(['orderId', 'product', 'size', 'color', 'qty'] as const).map(key => <label key={key}>
@@ -157,6 +157,12 @@ export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
     setDraft(emptyBatch()); setEditor(null); setSelectedScreenshot(null); setSelectedLabel(null);
     setHistoryId(null); setSelectedPrint([]); setWorksheetPreview(null); setShowAllOrders(false); setOnlyIssues(false);
     setStep(0); setMessage('已清空，可以重新上传。');
+  }
+  function saveMany(lines: OrderLine[]) {
+    const ids = lines.map(line => line.orderId.trim().toUpperCase());
+    if (new Set(ids).size !== ids.length || draft.lines.some(line => !line.excluded && ids.includes(line.orderId.trim().toUpperCase()))) throw new Error('包含已经添加的订单号，请先删除重复订单再添加。');
+    change({ ...draft, lines: [...draft.lines, ...lines] });
+    setEditor(null); setMessage(`已添加 ${lines.length} 个订单，上传标签后会自动匹配。`);
   }
   function saveLine(line: OrderLine) {
     const exists = draft.lines.some(l => l.id === line.id);
@@ -338,7 +344,7 @@ export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
     </>}
     {step === 1 && <>
       {screenshot && <section className="bw-card bw-preview-grid"><AssetPreview asset={draft.assets.find(a => a.id === screenshot.assetId)} /><div><h3>对照截图，确认每件商品</h3><pre>{screenshot.text || '未识别到文字，可对照图片录入。'}</pre><p>多件商品需分别添加。全部录入后再标记截图完成。</p><div className="bw-actions"><button disabled={frozen} onClick={() => setEditor({ ...emptyLine(), ...screenshotPrefill(screenshot.text) })}>继续添加截图商品</button><button disabled={frozen || !screenshot.lineIds?.length} onClick={() => { change({ ...draft, screenshots: draft.screenshots.map(s => s.id === screenshot.id ? { ...s, reviewed: true } : s) }); setSelectedScreenshot(null); setEditor(null); }}>完成截图录入</button><button disabled={frozen} onClick={() => { change({ ...draft, screenshots: draft.screenshots.map(s => s.id === screenshot.id ? { ...s, reviewed: true } : s) }); setSelectedScreenshot(null); setEditor(null); }}>排除此截图</button></div></div></section>}
-      {editor && !frozen && <OrderEditor key={editor.id} initial={editor} onSave={saveLine} onCancel={() => setEditor(null)} />}
+      {editor && !frozen && <OrderEditor key={editor.id} initial={editor} onSave={saveLine} onAddMany={saveMany} onCancel={() => setEditor(null)} />}
       <section className="bw-card"><div className="bw-section-head"><div><h2>订单商品</h2><p>缺少信息或重复的行需要修正。排除的订单不会进入本批生产单。</p></div><button disabled={frozen} onClick={() => setEditor(emptyLine())}>＋ 添加商品</button></div>
         <label className="bw-checkbox"><input type="checkbox" checked={onlyIssues} onChange={e => setOnlyIssues(e.target.checked)} />仅显示待核对商品</label><label className="bw-checkbox"><input type="checkbox" checked={showAllOrders} onChange={e => setShowAllOrders(e.target.checked)} />查看全部导入数据（含无标签订单）</label>
         <div className="bw-table-wrap"><table><thead><tr><th>账号 / 订单</th><th>产品 / 颜色 / 尺寸</th><th>数量</th><th>状态</th><th>操作</th></tr></thead><tbody>

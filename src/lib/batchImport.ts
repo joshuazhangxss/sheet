@@ -121,3 +121,19 @@ export function quickOrderPrefill(text: string): Partial<OrderLine> {
     size: explicitSize || extractSize(dimensionText, sku), color: (explicitColor && (extractColor(explicitColor, '') || explicitColor)) || text.match(/棕色|米色|灰色|蓝色|黄色|绿色|黑色|白色|红色|橙色|紫色/)?.[0] || extractColor(text, sku),
     note: value('note|notes|备注'), source: '粘贴录入', reviewed: false };
 }
+
+/** Split Amazon order cards before extracting fields so values never bleed between orders. */
+export function pastedOrderLines(input: string): Partial<OrderLine>[] {
+  const text = input.normalize('NFKC').replace(/\r\n?/g, '\n').replace(/[‐‑‒–—−]/g, '-')
+    .replace(/(\d{3})\s*-\s*(\d{7})\s*-\s*(\d{7})/g, '$1-$2-$3');
+  const matches = [...text.matchAll(/\b\d{3}-\d{7}-\d{7}\b/g)];
+  if (matches.length <= 1) return [quickOrderPrefill(text)];
+  if (new Set(matches.map(m => m[0])).size !== matches.length) throw new Error('同一订单号出现多次，请每个订单只粘贴一次；多个商品请分别添加。');
+  return matches.map((match, index) => {
+    const block = text.slice(match.index, matches[index + 1]?.index ?? text.length);
+    // Multiple quantities indicate multiple products in one card, not one combined item.
+    if ([...block.matchAll(/(?:quantity|qty|数量)\s*[:：]/gi)].length > 1) throw new Error(`订单 ${match[0]} 有多个商品，请分别添加，避免漏单。`);
+    const line = quickOrderPrefill(block);
+    return { ...line, size: extractSize(line.size || '', '') || line.size };
+  });
+}
