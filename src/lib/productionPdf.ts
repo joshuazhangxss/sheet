@@ -33,7 +33,7 @@ export function productionColumns(batch: ReleasedBatch) {
     const note = [mark, remainingNote].filter(Boolean).join(' ');
     const orderKey = JSON.stringify([line.seller, line.orderId]);
     const orderMarker = orderNumbers.has(orderKey) ? Array.from({ length: Math.floor(orderNumbers.get(orderKey)! / 26) + 1 }, () => String.fromCodePoint(0x24d0 + orderNumbers.get(orderKey)! % 26)).join('') : '';
-    const key = JSON.stringify([line.size, note, orderMarker]);
+    const key = JSON.stringify([orderKey, line.size, note, orderMarker]);
     const row = column.rows.get(key) ?? { size: line.size, note, qty: 0, orderMarker };
     row.qty += allocation.qty;
     column.rows.set(key, row);

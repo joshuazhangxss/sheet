@@ -110,6 +110,15 @@ const secondGroup = line('four', { orderId: 'OTHER-MULTI', qty: 2 });
 const letterRows = productionColumns({ ...workerBatch, lines: [...workerBatch.lines, secondGroup], shipments: [...workerBatch.shipments, { ...released.shipments[0], allocations: [{ lineId: secondGroup.id, qty: 2 }] }] }).flatMap(c => c.rows);
 assert.equal(letterRows.some(r => r.orderMarker === 'ⓑ'), false, 'multiple identical units do not receive a marker');
 
+// Identical dimensions/colors from different orders must never combine.
+const separateLines = [line('separate-a', { orderId: 'ORDER-A', size: '6 X 9', color: '灰色', qty: 1 }), line('separate-b', { orderId: 'ORDER-B', size: '6 X 9', color: '灰色', qty: 2 })];
+const separateBatch = { ...released, lines: separateLines, shipments: separateLines.map(l => ({ ...released.shipments[0], allocations: [{ lineId: l.id, qty: l.qty }] })) };
+const separateRows = productionColumns(separateBatch).flatMap(c => c.rows);
+assert.deepEqual(separateRows.map(r => r.qty), [1, 2], 'separate orders retain their own quantity');
+assert(separateRows.every(r => r.size === '6 X 9' && !r.orderMarker));
+const sameOrderBatch = { ...separateBatch, lines: separateLines.map(l => ({ ...l, orderId: 'ORDER-A' })) };
+assert.deepEqual(productionColumns(sameOrderBatch).flatMap(c => c.rows).map(r => r.qty), [3], 'identical items within one order still combine');
+
 const uploadOrder = releaseBatch({ ...emptyBatch(), lines: [a, b], labels: [{ ...label('second-order', b.orderId), assetId: 'first-upload' }, { ...label('first-order', a.orderId), assetId: 'second-upload' }] });
 assert.deepEqual(uploadOrder.shipments.map(s => s.allocations[0].lineId), [b.id, a.id]);
 assert.equal(uploadOrder.labelOrder, 'upload');
