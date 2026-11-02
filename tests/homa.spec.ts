@@ -148,3 +148,21 @@ test('four Amazon cards paste as separate normalized orders and reject repeat in
   await page.getByRole('button', { name: '添加全部 4 个订单', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('已经添加');
 });
+
+test('incomplete HOMA summary exposes each suggested label instead of hiding confirmation', async ({ page }) => {
+  const directory = process.env.HOMA_NOV_FIXTURES;
+  test.skip(!directory, 'Requires the four October 30 / November 1 HOMA files');
+  test.setTimeout(180_000);
+  await page.goto('/');
+  await page.locator('.bw input[type=file]').setInputFiles(['2026103001_HOMA .xlsx','2026103001_HOMA_Label.pdf','2026110101_HOMA .xlsx','2026110101_HOMA_Label.pdf'].map(name => `${directory}/${name}`));
+  await expect(page.getByRole('status')).toContainText('已处理 4 个文件', { timeout: 150_000 });
+  await expect(page.getByText(/有 11 张标签，但汇总页只有 9 个订单号/)).toBeVisible();
+  await page.getByRole('button', { name: '查看结果并打印 →' }).click();
+  const table = page.getByRole('table', { name: '待确认标签' });
+  await expect(table.locator('tbody tr')).toHaveCount(11);
+  await expect(table.locator('tbody tr').first()).toContainText('114-2271794-9042650');
+  await expect(table.locator('tbody tr').nth(2)).toContainText('111-5131405-1366627');
+  await expect(page.getByRole('button', { name: '继续打印', exact: true })).toBeDisabled();
+  await table.getByRole('button', { name: '查看标签并确认' }).first().click();
+  await expect(page.getByRole('heading', { name: '核对标签原件' })).toBeVisible();
+});
