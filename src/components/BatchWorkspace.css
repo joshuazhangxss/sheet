@@ -109,3 +109,13 @@
 .bw .bw-record-grid tbody tr:hover { background: #eaf3ee; }
 .bw .bw-record-grid .bw-record-qty { font-weight: 700; text-align: center; }
 .bw .bw-record-grid .bw-record-note { white-space: normal; min-width: 120px; max-width: 240px; overflow-wrap: anywhere; }
+
+/* Larger on-screen order details for reading and copying label-back information. */
+.bw .bw-print-center table, .bw .bw-order-details table { font-size: 18px; line-height: 1.6; }
+.bw .bw-print-center th, .bw .bw-order-details th { font-size: 16px; }
+.bw .bw-print-center td, .bw .bw-order-details td { padding: 16px 12px; }
+.bw .bw-print-center td:nth-child(2), .bw .bw-print-center td:nth-child(5) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bw .bw-print-center td:nth-child(4) { font-size: 20px; font-weight: 600; min-width: 280px; }
+.bw .bw-print-center td:nth-child(4) > div { white-space: nowrap; }
+.bw .bw-print-center input[type=checkbox] { width: 22px; height: 22px; }
+.bw .bw-order-details small, .bw .bw-print-center .bw-muted { font-size: 14px; }
