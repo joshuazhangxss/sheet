@@ -11,11 +11,15 @@ export async function orderedLabelsPdf(batch: ReleasedBatch, assets: Asset[], se
   const output = await PDFDocument.create();
   const documents = new Map<string, PDFDocument>();
   let stripFont: PDFFont | undefined;
+  let boldStripFont: PDFFont | undefined;
   if (withStrip) {
     output.registerFontkit(fontkit);
     const response = await fetch('/fonts/arial-unicode.ttf');
     if (!response.ok) throw new Error('打印字体加载失败，请重试');
     stripFont = await output.embedFont(await response.arrayBuffer(), { subset: true });
+    const boldResponse = await fetch('/fonts/arial-bold.ttf');
+    if (!boldResponse.ok) throw new Error('打印字体加载失败，请重试');
+    boldStripFont = await output.embedFont(await boldResponse.arrayBuffer(), { subset: true });
   }
   for (const [index, shipment] of batch.shipments.entries()) {
     if (selected && !selected.includes(index)) continue;
@@ -36,6 +40,18 @@ export async function orderedLabelsPdf(batch: ReleasedBatch, assets: Asset[], se
         if (!line) throw new Error('标签缺少订单商品信息');
         return labelStripText(line, a.qty);
       });
+      const fontFor = (char: string) => char.charCodeAt(0) < 128 || char === '×' ? boldStripFont! : stripFont!;
+      const charSize = (char: string, size: number) => char === '★' ? size * 1.4 : size;
+      const measure = (text: string, size: number) => [...text].reduce((width, char) => width + fontFor(char).widthOfTextAtSize(char, charSize(char, size)), 0);
+      const wrapStrip = (text: string, size: number) => {
+        const rows: string[] = []; let current = '';
+        for (const char of text) {
+          if (current && measure(current + char, size) > pageWidth - margin * 2) { rows.push(current); current = ''; }
+          current += char;
+        }
+        if (current) rows.push(current);
+        return rows;
+      };
       // Prefer one line; wrap between complete items before reducing type size.
       let fontSize = 11;
       const pack = (size: number) => {
@@ -43,10 +59,10 @@ export async function orderedLabelsPdf(batch: ReleasedBatch, assets: Asset[], se
         let current = '';
         for (const item of items) {
           const combined = current ? `${current} | ${item}` : item;
-          if (stripFont!.widthOfTextAtSize(combined, size) <= pageWidth - margin * 2) current = combined;
+          if (measure(combined, size) <= pageWidth - margin * 2) current = combined;
           else {
             if (current) rows.push(current);
-            const parts = wrap(item, stripFont!, size, pageWidth - margin * 2);
+            const parts = wrapStrip(item, size);
             rows.push(...parts.slice(0, -1)); current = parts.at(-1) || '';
           }
         }
@@ -55,7 +71,7 @@ export async function orderedLabelsPdf(batch: ReleasedBatch, assets: Asset[], se
       };
       let texts = pack(fontSize);
       while (texts.length > 2 && fontSize > 9) { fontSize -= 0.5; texts = pack(fontSize); }
-      const stripHeight = texts.length * (fontSize + 3) + 13;
+      const stripHeight = texts.length * (fontSize * 1.4 + 3) + 13;
       if (stripHeight > 70) throw new Error('此订单商品太多，无法在信息条内清晰排版。请使用原始标签和顺序对照单。');
       const target = output.addPage([pageWidth, pageHeight]);
       const availableHeight = pageHeight - stripHeight - margin * 2;
@@ -64,7 +80,15 @@ export async function orderedLabelsPdf(batch: ReleasedBatch, assets: Asset[], se
       target.drawPage(embedded, { x: (pageWidth - width * scale) / 2, y: margin, width: width * scale, height: height * scale });
       const cutY = pageHeight - margin - stripHeight;
       target.drawLine({ start: { x: margin, y: cutY }, end: { x: pageWidth - margin, y: cutY }, thickness: 0.5, dashArray: [3, 3], color: rgb(0.5, 0.5, 0.5) });
-      texts.forEach((text, i) => target.drawText(text, { x: margin, y: pageHeight - margin - fontSize - i * (fontSize + 3), size: fontSize, font: stripFont! }));
+      texts.forEach((text, i) => {
+        let x = margin;
+        const y = pageHeight - margin - fontSize * 1.4 - i * (fontSize * 1.4 + 3);
+        for (const char of text) {
+          const font = fontFor(char), size = charSize(char, fontSize);
+          target.drawText(char, { x, y, size, font });
+          x += font.widthOfTextAtSize(char, size);
+        }
+      });
     }
   }
   if (!output.getPageCount()) throw new Error('请选择至少一个标签');

@@ -23,13 +23,13 @@ for (const paper of ['4x6', '100x150'] as const) test(`detachable strip fits ${p
     const renderer=await import(/* @vite-ignore */ rendererPath);
     renderer.GlobalWorkerOptions.workerSrc='/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs';
     const rendered=await renderer.getDocument({data:new Uint8Array(bytes)}).promise;
-    const first=await rendered.getPage(1);const text=(await first.getTextContent()).items.map((i:{str?:string})=>i.str||'').join(' ');
+    const first=await rendered.getPage(1);const text=(await first.getTextContent()).items.map((i:{str?:string})=>i.str||'').join(' ').replace(/\s+/g, ' ');
     const canvas=document.createElement('canvas');const viewport=first.getViewport({scale:2});canvas.width=viewport.width;canvas.height=viewport.height;
     await first.render({canvas,viewport}).promise;document.body.replaceChildren(canvas);
     return {bytes:[...bytes],text,size:pdf.getPage(0).getSize(),count:pdf.getPageCount()};
   }, paper);
   expect(result.count).toBe(1);expect(result.size.width).toBeCloseTo(paper === '4x6' ? 288 : 100*72/25.4);expect(result.size.height).toBeCloseTo(paper === '4x6' ? 432 : 150*72/25.4);
-  expect(result.text).toContain('Yellow 7x7z+k ★');expect(result.text).toContain('Yellow 7x7bal');expect(result.text).toContain('ORIGINAL SHIPPING LABEL');
+  expect(result.text).toContain('Yellow 7x7 z+k ★');expect(result.text).toContain('Yellow 7x7 bal');expect(result.text).toContain('ORIGINAL SHIPPING LABEL');
   await writeFile(testInfo.outputPath('label-strip.pdf'),Buffer.from(result.bytes));
   await page.locator('canvas').screenshot({path:testInfo.outputPath('label-strip.png')});
 });

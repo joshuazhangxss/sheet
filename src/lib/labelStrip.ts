@@ -9,5 +9,5 @@ export function labelStripText(line: OrderLine, qty: number): string {
   const ring = /\bgrommets?\b|加环|打环|直\s*[+＋]\s*环|(?:^|\s)环(?:\s|$)/i.test(`${line.product} ${line.sku} ${line.note}`);
   const mark = type === '直边加环' ? 'z+k' : type === '直边' ? 'z' : isPrivacyFenceType(type) ? 'bal' : ring ? 'k' : '';
   const rush = /★|加急|\brush\b|\bexpedited\b|\bpriority\b/i.test(`${line.note} ${line.shippingService}`);
-  return `${color} ${size}${mark}${qty > 1 ? ` ×${qty}` : ''}${rush ? ' ★' : ''}`;
+  return `${color} ${size}${mark ? ` ${mark}` : ''}${qty > 1 ? ` ×${qty}` : ''}${rush ? ' ★' : ''}`;
 }
