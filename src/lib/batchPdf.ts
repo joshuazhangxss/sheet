@@ -1,14 +1,22 @@
 import { PDFDocument, rgb } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
+import { labelStripText } from './labelStrip';
 import { batchProductType } from './batchProductType';
 import { drawProductionSheet } from './productionPdf';
 import type { PDFFont, PDFPage } from 'pdf-lib';
 import { displayMerchant } from './batchWorkflow';
 import type { Asset, ReleasedBatch } from './batchWorkflow';
 
-export async function orderedLabelsPdf(batch: ReleasedBatch, assets: Asset[], selected?: number[]): Promise<Uint8Array> {
+export async function orderedLabelsPdf(batch: ReleasedBatch, assets: Asset[], selected?: number[], withStrip = false): Promise<Uint8Array> {
   const output = await PDFDocument.create();
   const documents = new Map<string, PDFDocument>();
+  let stripFont: PDFFont | undefined;
+  if (withStrip) {
+    output.registerFontkit(fontkit);
+    const response = await fetch('/fonts/noto-sans-sc.ttf');
+    if (!response.ok) throw new Error('打印字体加载失败，请重试');
+    stripFont = await output.embedFont(await response.arrayBuffer(), { subset: false });
+  }
   for (const [index, shipment] of batch.shipments.entries()) {
     if (selected && !selected.includes(index)) continue;
     const asset = assets.find(a => a.id === shipment.label.assetId);
@@ -16,7 +24,22 @@ export async function orderedLabelsPdf(batch: ReleasedBatch, assets: Asset[], se
     let document = documents.get(asset.id);
     if (!document) { document = await PDFDocument.load(await asset.file.arrayBuffer()); documents.set(asset.id, document); }
     const [page] = await output.copyPages(document, [shipment.label.pageNumber - 1]);
-    output.addPage(page);
+    if (!stripFont) output.addPage(page);
+    else {
+      const { width, height } = page.getSize();
+      if (page.getRotation().angle !== 0) throw new Error('此标签带旋转设置，请先使用原始标签打印。');
+      const texts = shipment.allocations.flatMap(a => {
+        const line = batch.lines.find(l => l.id === a.lineId);
+        if (!line) throw new Error('标签缺少订单商品信息');
+        return wrap(labelStripText(line, a.qty), stripFont!, 13, width - 20);
+      });
+      const stripHeight = Math.max(36, texts.length * 18 + 16);
+      const target = output.addPage([width, height + stripHeight]);
+      const embedded = await output.embedPage(page);
+      target.drawPage(embedded, { x: 0, y: 0, width, height });
+      target.drawLine({ start: { x: 8, y: height + 2 }, end: { x: width - 8, y: height + 2 }, thickness: 0.5, dashArray: [3, 3], color: rgb(0.5, 0.5, 0.5) });
+      texts.forEach((text, i) => target.drawText(text, { x: 10, y: height + stripHeight - 20 - i * 18, size: 13, font: stripFont! }));
+    }
   }
   if (!output.getPageCount()) throw new Error('请选择至少一个标签');
   return output.save();

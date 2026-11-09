@@ -254,7 +254,7 @@ export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
     } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(''); }
   }
-  async function exportPdf(kind: 'labels' | 'list' | 'worksheet' | 'selected', preview = false, decision?: 'save' | 'skip') {
+  async function exportPdf(kind: 'labels' | 'labels-strip' | 'list' | 'worksheet' | 'selected', preview = false, decision?: 'save' | 'skip') {
     if (!released || printLock.current) return;
     printLock.current = true;
     setBusy('正在生成打印 PDF…');
@@ -277,8 +277,8 @@ export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
         }
       }
       const { batchDocumentPdf, orderedLabelsPdf } = await import('../lib/batchPdf');
-      const bytes = kind === 'labels' || kind === 'selected'
-        ? await orderedLabelsPdf(released, draft.assets, kind === 'selected' ? selectedPrint : undefined)
+      const bytes = kind === 'labels' || kind === 'labels-strip' || kind === 'selected'
+        ? await orderedLabelsPdf(released, draft.assets, kind === 'selected' ? selectedPrint : undefined, kind === 'labels-strip')
         : await batchDocumentPdf(released, kind);
       if (preview) {
         setWorksheetPreview({ batchId: released.id, asset: { id: released.id, name: '生产工作单', file: new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }) } });
@@ -364,7 +364,8 @@ export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
       {chosenShipment && !frozen && <section className="bw-card bw-preview-grid"><AssetPreview asset={draft.assets.find(a => a.id === chosenShipment.label.assetId)} page={chosenShipment.label.pageNumber} /><div><h3>核对标签原件</h3><p>{chosenShipment.reason}</p><ShipmentEditor key={`${chosenShipment.label.id}:${JSON.stringify(chosenShipment.allocations)}`} shipment={chosenShipment} lines={draft.lines} onSave={allocations => { change({ ...draft, assignments: { ...draft.assignments, [chosenShipment.label.id]: { allocations, confirmed: true } } }); setSelectedLabel(null); }} /></div></section>}
     </>}
     {step === 3 && <section className="bw-card bw-print-center"><div className="bw-section-head"><div><h2>打印中心</h2><p className="bw-muted">{released?.labelOrder === 'upload' ? '按标签上传顺序排列，同一文件按原页码；序号对应打印页码。' : '历史批次保留原顺序；新增文件后会重新生成打印结果。'}</p></div><select aria-label="选择历史批次" value={historyId ?? draft.releasedId ?? ''} onChange={e => { setHistoryId(e.target.value); setSelectedPrint([]); }}><option value="">选择已发布批次</option>{draft.history.map(b => <option key={b.id} value={b.id}>{b.id.slice(0, 8)} · {new Date(b.createdAt).toLocaleString()}</option>)}</select></div>
-      {released ? <><p>批次 {released.id.slice(0, 8)} · {released.shipments.length} 个包裹</p>{draft.history.some(b => b.revises === released.id) && <p className="bw-error">此批次已有更新版本，请选择最新批次打印。</p>}<div className="bw-actions"><button className="bw-primary" onClick={() => void exportPdf('labels')}>打印全部标签 PDF</button><button onClick={() => void exportPdf('list')}>2. 打印顺序对照单</button><button onClick={() => void exportPdf('worksheet')}>3. 打印生产工作单</button><button disabled={Boolean(busy)} onClick={() => void exportPdf('worksheet', true)}>预览生产工作单</button></div>
+      {released ? <><p>批次 {released.id.slice(0, 8)} · {released.shipments.length} 个包裹</p>{draft.history.some(b => b.revises === released.id) && <p className="bw-error">此批次已有更新版本，请选择最新批次打印。</p>}<div className="bw-actions"><button className="bw-primary" onClick={() => void exportPdf('labels')}>打印全部标签 PDF</button><button className="bw-primary" onClick={() => void exportPdf('labels-strip')}>打印标签＋裁剪信息条</button><button onClick={() => void exportPdf('list')}>2. 打印顺序对照单</button><button onClick={() => void exportPdf('worksheet')}>3. 打印生产工作单</button><button disabled={Boolean(busy)} onClick={() => void exportPdf('worksheet', true)}>预览生产工作单</button></div>
+        <p className="bw-muted">裁剪信息条加在标签上方，原标签保持原尺寸。请使用足够长的纸张并按 100% 实际尺寸打印；固定 4×6 纸张请用原始标签打印。</p>
         {worksheetPreview?.batchId === released.id && <section className="bw-card" aria-label="生产工作单预览"><div className="bw-actions"><h3>生产工作单预览</h3><button onClick={() => setWorksheetPreview(null)}>关闭预览</button><button onClick={() => void exportPdf('worksheet')}>下载打印 PDF</button></div><AssetPreview asset={worksheetPreview.asset} /></section>}
         <div className="bw-table-wrap"><table><thead><tr><th>补打</th><th>序号</th><th>商家 / 品牌</th><th>标签背面：类型 · 颜色 · 尺寸 · 数量</th><th>订单号</th></tr></thead><tbody>{released.shipments.map((s, index) => <tr key={s.label.id}><td><input aria-label={`选择补打 ${index + 1}`} type="checkbox" checked={selectedPrint.includes(index)} onChange={e => setSelectedPrint(e.target.checked ? [...selectedPrint, index].sort((a, b) => a - b) : selectedPrint.filter(i => i !== index))} /></td><td>{String(index + 1).padStart(3, '0')}</td><td>{displayMerchant(released.lines.find(l => l.id === s.allocations[0].lineId)!)}</td><td>{s.allocations.map(a => { const l = released.lines.find(line => line.id === a.lineId)!; return <div key={a.lineId}>{batchProductType(l)} · {l.color} · {l.size} · ×{a.qty}{l.note.includes('★') ? ' · 加急' : ''}</div>; })}</td><td>{released.lines.find(l => l.id === s.allocations[0].lineId)?.orderId}</td></tr>)}</tbody></table></div>
         <button disabled={!selectedPrint.length} onClick={() => void exportPdf('selected')}>只补打选中的标签（{selectedPrint.length}）</button><details><summary>文件生成记录（不代表实体打印完成）</summary><ul>{released.downloads.map((d, i) => <li key={i}>{new Date(d.at).toLocaleString()} · {d.kind}</li>)}</ul></details>
