@@ -132,3 +132,8 @@ assert.equal(batchProductType(line('edge', { product:'Privacy fence with grommet
 const ringLine = line('ring', {product:'Straight edge shade sail with grommets', note:''});
 const ringBatch = { ...released, lines:[ringLine], shipments:[{...released.shipments[0],allocations:[{lineId:ringLine.id,qty:1}]}] };
 assert.equal(productionColumns(ringBatch)[0].rows[0].note, '直+环');
+
+const { labelStripText } = await import('../src/lib/labelStrip');
+assert.equal(labelStripText(line('bal', { product: 'Balcony Privacy Screen', color: '黄色', size: '2‘6“x 140”' }), 1), 'Yellow 2′6″ x 140″ bal');
+assert.equal(labelStripText(line('bal', { product: 'Balcony Privacy Screen', color: '黄色', size: '2ft6in x 140in' }), 1), 'Yellow 2′6″ x 140″ bal');
+assert.equal(labelStripText(line('bal', { product: 'Balcony Privacy Screen', color: '黄色', size: '3 x 10' }), 1), 'Yellow 3 x 10 bal');

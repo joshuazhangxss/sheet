@@ -14,7 +14,7 @@ for (const paper of ['4x6', '100x150'] as const) test(`detachable strip fits ${p
     const lines = [
       {...emptyLine(),id:'a',color:'黄色',size:'7’ X 7’',product:'Straight edge with grommets',note:'★'},
       {...emptyLine(),id:'b',color:'黄色',size:'7’ X 7’',product:'Shade sail'},
-      {...emptyLine(),id:'c',color:'黄色',size:'7’ X 7’',product:'Privacy fence'},
+      {...emptyLine(),id:'c',color:'黄色',size:'2‘6“ X 140”',product:'Privacy fence'},
     ];
     const batch = {lines,shipments:[{label:{assetId:'pdf',pageNumber:1},allocations:(paper === '100x150' ? [...lines, ...lines] : lines).map(l=>({lineId:l.id,qty:1}))}]};
     const bytes = await orderedLabelsPdf(batch,[{id:'pdf',file:new Blob([await source.save()])}],undefined,true,paper);
@@ -29,7 +29,7 @@ for (const paper of ['4x6', '100x150'] as const) test(`detachable strip fits ${p
     return {bytes:[...bytes],text,size:pdf.getPage(0).getSize(),count:pdf.getPageCount()};
   }, paper);
   expect(result.count).toBe(1);expect(result.size.width).toBeCloseTo(paper === '4x6' ? 288 : 100*72/25.4);expect(result.size.height).toBeCloseTo(paper === '4x6' ? 432 : 150*72/25.4);
-  expect(result.text).toContain('Yellow 7x7 z+k ★');expect(result.text).toContain('Yellow 7x7 bal');expect(result.text).toContain('ORIGINAL SHIPPING LABEL');
+  expect(result.text).toContain('Yellow 7x7 z+k ★');expect(result.text.replace(/\s/g, '')).toContain('Yellow2′6″x140″bal');expect(result.text).toContain('ORIGINAL SHIPPING LABEL');
   await writeFile(testInfo.outputPath('label-strip.pdf'),Buffer.from(result.bytes));
   await page.locator('canvas').screenshot({path:testInfo.outputPath('label-strip.png')});
 });
