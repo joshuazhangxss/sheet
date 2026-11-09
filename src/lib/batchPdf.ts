@@ -7,15 +7,15 @@ import type { PDFFont, PDFPage } from 'pdf-lib';
 import { displayMerchant } from './batchWorkflow';
 import type { Asset, ReleasedBatch } from './batchWorkflow';
 
-export async function orderedLabelsPdf(batch: ReleasedBatch, assets: Asset[], selected?: number[], withStrip = false): Promise<Uint8Array> {
+export async function orderedLabelsPdf(batch: ReleasedBatch, assets: Asset[], selected?: number[], withStrip = false, paper: '4x6' | '100x150' = '4x6'): Promise<Uint8Array> {
   const output = await PDFDocument.create();
   const documents = new Map<string, PDFDocument>();
   let stripFont: PDFFont | undefined;
   if (withStrip) {
     output.registerFontkit(fontkit);
-    const response = await fetch('/fonts/noto-sans-sc.ttf');
+    const response = await fetch('/fonts/arial-unicode.ttf');
     if (!response.ok) throw new Error('打印字体加载失败，请重试');
-    stripFont = await output.embedFont(await response.arrayBuffer(), { subset: false });
+    stripFont = await output.embedFont(await response.arrayBuffer(), { subset: true });
   }
   for (const [index, shipment] of batch.shipments.entries()) {
     if (selected && !selected.includes(index)) continue;
@@ -28,17 +28,43 @@ export async function orderedLabelsPdf(batch: ReleasedBatch, assets: Asset[], se
     else {
       const { width, height } = page.getSize();
       if (page.getRotation().angle !== 0) throw new Error('此标签带旋转设置，请先使用原始标签打印。');
-      const texts = shipment.allocations.flatMap(a => {
+      const pageWidth = paper === '100x150' ? 100 * 72 / 25.4 : 288;
+      const pageHeight = paper === '100x150' ? 150 * 72 / 25.4 : 432;
+      const margin = 7;
+      const items = shipment.allocations.map(a => {
         const line = batch.lines.find(l => l.id === a.lineId);
         if (!line) throw new Error('标签缺少订单商品信息');
-        return wrap(labelStripText(line, a.qty), stripFont!, 13, width - 20);
+        return labelStripText(line, a.qty);
       });
-      const stripHeight = Math.max(36, texts.length * 18 + 16);
-      const target = output.addPage([width, height + stripHeight]);
+      // Prefer one line; wrap between complete items before reducing type size.
+      let fontSize = 11;
+      const pack = (size: number) => {
+        const rows: string[] = [];
+        let current = '';
+        for (const item of items) {
+          const combined = current ? `${current} | ${item}` : item;
+          if (stripFont!.widthOfTextAtSize(combined, size) <= pageWidth - margin * 2) current = combined;
+          else {
+            if (current) rows.push(current);
+            const parts = wrap(item, stripFont!, size, pageWidth - margin * 2);
+            rows.push(...parts.slice(0, -1)); current = parts.at(-1) || '';
+          }
+        }
+        if (current) rows.push(current);
+        return rows;
+      };
+      let texts = pack(fontSize);
+      while (texts.length > 2 && fontSize > 9) { fontSize -= 0.5; texts = pack(fontSize); }
+      const stripHeight = texts.length * (fontSize + 3) + 13;
+      if (stripHeight > 70) throw new Error('此订单商品太多，无法在信息条内清晰排版。请使用原始标签和顺序对照单。');
+      const target = output.addPage([pageWidth, pageHeight]);
+      const availableHeight = pageHeight - stripHeight - margin * 2;
+      const scale = Math.min((pageWidth - margin * 2) / width, availableHeight / height);
       const embedded = await output.embedPage(page);
-      target.drawPage(embedded, { x: 0, y: 0, width, height });
-      target.drawLine({ start: { x: 8, y: height + 2 }, end: { x: width - 8, y: height + 2 }, thickness: 0.5, dashArray: [3, 3], color: rgb(0.5, 0.5, 0.5) });
-      texts.forEach((text, i) => target.drawText(text, { x: 10, y: height + stripHeight - 20 - i * 18, size: 13, font: stripFont! }));
+      target.drawPage(embedded, { x: (pageWidth - width * scale) / 2, y: margin, width: width * scale, height: height * scale });
+      const cutY = pageHeight - margin - stripHeight;
+      target.drawLine({ start: { x: margin, y: cutY }, end: { x: pageWidth - margin, y: cutY }, thickness: 0.5, dashArray: [3, 3], color: rgb(0.5, 0.5, 0.5) });
+      texts.forEach((text, i) => target.drawText(text, { x: margin, y: pageHeight - margin - fontSize - i * (fontSize + 3), size: fontSize, font: stripFont! }));
     }
   }
   if (!output.getPageCount()) throw new Error('请选择至少一个标签');

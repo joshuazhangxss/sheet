@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-test('detachable strip preserves label dimensions and prints all allocated items', async ({ page }, testInfo) => {
+for (const paper of ['4x6', '100x150'] as const) test(`detachable strip fits ${paper} paper and prints all allocated items`, async ({ page }, testInfo) => {
   await page.goto('/');
-  const result = await page.evaluate(async () => {
+  const result = await page.evaluate(async paper => {
     const pdfPath = '/node_modules/.vite/deps/pdf-lib.js';
     const { PDFDocument } = await import(/* @vite-ignore */ pdfPath);
     const modulePath = '/src/lib/batchPdf.ts';
@@ -16,8 +16,8 @@ test('detachable strip preserves label dimensions and prints all allocated items
       {...emptyLine(),id:'b',color:'黄色',size:'7’ X 7’',product:'Shade sail'},
       {...emptyLine(),id:'c',color:'黄色',size:'7’ X 7’',product:'Privacy fence'},
     ];
-    const batch = {lines,shipments:[{label:{assetId:'pdf',pageNumber:1},allocations:lines.map(l=>({lineId:l.id,qty:1}))}]};
-    const bytes = await orderedLabelsPdf(batch,[{id:'pdf',file:new Blob([await source.save()])}],undefined,true);
+    const batch = {lines,shipments:[{label:{assetId:'pdf',pageNumber:1},allocations:(paper === '100x150' ? [...lines, ...lines] : lines).map(l=>({lineId:l.id,qty:1}))}]};
+    const bytes = await orderedLabelsPdf(batch,[{id:'pdf',file:new Blob([await source.save()])}],undefined,true,paper);
     const pdf = await PDFDocument.load(bytes);
     const rendererPath='/node_modules/pdfjs-dist/legacy/build/pdf.mjs';
     const renderer=await import(/* @vite-ignore */ rendererPath);
@@ -27,9 +27,9 @@ test('detachable strip preserves label dimensions and prints all allocated items
     const canvas=document.createElement('canvas');const viewport=first.getViewport({scale:2});canvas.width=viewport.width;canvas.height=viewport.height;
     await first.render({canvas,viewport}).promise;document.body.replaceChildren(canvas);
     return {bytes:[...bytes],text,size:pdf.getPage(0).getSize(),count:pdf.getPageCount()};
-  });
-  expect(result.count).toBe(1);expect(result.size).toEqual({width:288,height:502});
-  expect(result.text).toContain('黄 7x7直加环 急');expect(result.text).toContain('黄 7x7阳');expect(result.text).toContain('ORIGINAL SHIPPING LABEL');
+  }, paper);
+  expect(result.count).toBe(1);expect(result.size.width).toBeCloseTo(paper === '4x6' ? 288 : 100*72/25.4);expect(result.size.height).toBeCloseTo(paper === '4x6' ? 432 : 150*72/25.4);
+  expect(result.text).toContain('Yellow 7x7z+k ★');expect(result.text).toContain('Yellow 7x7bal');expect(result.text).toContain('ORIGINAL SHIPPING LABEL');
   await writeFile(testInfo.outputPath('label-strip.pdf'),Buffer.from(result.bytes));
   await page.locator('canvas').screenshot({path:testInfo.outputPath('label-strip.png')});
 });
