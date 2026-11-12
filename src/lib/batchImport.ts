@@ -1,6 +1,6 @@
 import Papa from 'papaparse';
 import { extractColor, extractSize } from './orderProcessing';
-import { emptyLine, normalize } from './batchWorkflow';
+import { emptyLine, normalize, orderKey } from './batchWorkflow';
 import type { OrderLine, PendingTable } from './batchWorkflow';
 
 export const importFields = {
@@ -70,6 +70,8 @@ export function tableToLines(table: PendingTable): OrderLine[] {
       line.recipient ||= recipient;
       line.seller ||= 'HOMA';
     }
+    const itemHeader = Object.keys(record).find(header => normalize(header) === 'ORDERITEMID');
+    if (itemHeader) line.importItemId = String(record[itemHeader]).trim() || undefined;
     line.id = `${table.id}:row:${index}`;
     line.source = `${table.name} · 行 ${index + 2}`;
     // Never silently turn an absent, fractional, or malformed quantity into one.
@@ -136,4 +138,26 @@ export function pastedOrderLines(input: string): Partial<OrderLine>[] {
     const line = quickOrderPrefill(block);
     return { ...line, size: extractSize(line.size || '', '') || line.size };
   });
+}
+
+/** Skip unchanged items repeated across reports, never combine their quantities. */
+export function mergeImportedLines(existing: OrderLine[], incoming: OrderLine[]) {
+  const signature = (line: OrderLine) => JSON.stringify([
+    orderKey(line), line.importItemId || '', line.product.trim(), line.sku.trim(), line.size.trim(), line.color.trim(), line.qty,
+    line.note.trim(), line.tracking.trim(), line.recipient.trim(), line.address.trim(), line.postal.trim(),
+    line.fulfillment.trim(), line.shippingService.trim(), /cancel|取消/i.test(`${line.status} ${line.itemStatus}`),
+  ]);
+  const counts = new Map<string, number>();
+  // Only compare against prior reports. Duplicates inside one report still need review.
+  for (const line of existing) {
+    if (line.excluded || !line.id.includes(':row:')) continue;
+    const key = signature(line); counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  let skipped = 0;
+  const added = incoming.filter(line => {
+    const key = signature(line), count = counts.get(key) || 0;
+    if (count) { counts.set(key, count - 1); skipped++; return false; }
+    return true;
+  });
+  return { lines: [...existing, ...added], skipped };
 }

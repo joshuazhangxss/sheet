@@ -2,6 +2,7 @@ import { extractCompanyName } from './orderProcessing';
 import type { LabelPage } from '../types';
 
 export type OrderLine = {
+  importItemId?: string;
   id: string; seller: string; orderId: string; tracking: string; recipient: string;
   address: string; postal: string; product: string; sku: string; size: string;
   color: string; qty: number; note: string; source: string; excluded: boolean;
@@ -33,6 +34,7 @@ export function orderKey(line: OrderLine): string {
   return JSON.stringify([canonical(line.seller), canonical(line.orderId) || line.id]);
 }
 export function lineIdentity(line: OrderLine): string {
+  if (line.importItemId) return JSON.stringify([orderKey(line), line.importItemId]);
   return [orderKey(line), normalize(line.sku), normalize(line.product), normalize(line.size), normalize(line.color)].join('|');
 }
 // Match identifiers as complete tokens, allowing spaces/hyphens within long identifiers.

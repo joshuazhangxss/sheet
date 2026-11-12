@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { batchProblems, displayMerchant, labelOrderLines, emptyBatch, emptyLine, fingerprint, lineProblems, loadDraft, orderKey, releaseBatch, saveDraft, suggestShipments } from '../lib/batchWorkflow';
 import type { Asset, BatchDraft, OrderLine, Shipment, ReleasedBatch } from '../lib/batchWorkflow';
-import { detectMapping, importFields, readTables, screenshotPrefill, tableCanImport, tableToLines } from '../lib/batchImport';
+import { detectMapping, mergeImportedLines, importFields, readTables, screenshotPrefill, tableCanImport, tableToLines } from '../lib/batchImport';
 import type { ImportField } from '../lib/batchImport';
 import './BatchWorkspace.css';
 import { batchProductType } from '../lib/batchProductType';
@@ -230,7 +230,11 @@ export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
             const tables = await readTables(file, id);
             if (!tables.length) throw new Error('没有找到数据行');
             for (const table of tables) {
-              if (tableCanImport(table)) next.lines.push(...tableToLines(table));
+              if (tableCanImport(table)) {
+                const merged = mergeImportedLines(next.lines, tableToLines(table));
+                next.lines = merged.lines;
+                if (merged.skipped) errors.push(`${table.name}: 已忽略 ${merged.skipped} 行跨文件重复商品，数量未重复计算。`);
+              }
               else next.pending.push(table);
             }
             if (!next.assets.some(a => a.id === id)) next.assets.push({ id, name: file.name, file });
@@ -339,7 +343,7 @@ export function BatchWorkspace({ onAdvanced }: { onAdvanced: () => void }) {
       {draft.pending.map(table => <section className="bw-card" key={table.id}><h3>识别表格字段：{table.name}</h3><p>{table.records.length} 行。选择每个字段对应的列；不会猜测未知格式。</p>
         <div className="bw-form-grid">{(Object.keys(importFields) as ImportField[]).map(key => <label key={key}>{importFields[key]}<select aria-label={`映射 ${importFields[key]}`} disabled={frozen} value={table.mapping[key] ?? ''} onChange={e => change({ ...draft, pending: draft.pending.map(t => t.id === table.id ? { ...t, mapping: { ...t.mapping, [key]: e.target.value } } : t) })}><option value="">不使用</option>{Object.keys(table.records[0] ?? {}).map(h => <option key={h}>{h}</option>)}</select></label>)}</div>
         <details><summary>预览前 3 行</summary><pre>{JSON.stringify(table.records.slice(0, 3), null, 2)}</pre></details>
-        <div className="bw-actions"><button disabled={frozen || !table.mapping.product || !table.mapping.qty || !table.mapping.orderId} onClick={() => change({ ...draft, lines: [...draft.lines, ...tableToLines(table)], pending: draft.pending.filter(t => t.id !== table.id) })}>应用映射并导入</button><button disabled={frozen} onClick={() => change({ ...draft, pending: draft.pending.filter(t => t.id !== table.id) })}>排除此表格</button><button disabled={frozen} onClick={() => change({ ...draft, pending: draft.pending.map(t => t.id === table.id ? { ...t, mapping: detectMapping(Object.keys(t.records[0])) } : t) })}>重置映射</button></div>
+        <div className="bw-actions"><button disabled={frozen || !table.mapping.product || !table.mapping.qty || !table.mapping.orderId} onClick={() => { const merged = mergeImportedLines(draft.lines, tableToLines(table)); change({ ...draft, lines: merged.lines, pending: draft.pending.filter(t => t.id !== table.id), warnings: merged.skipped ? [...draft.warnings, `${table.name}: 已忽略 ${merged.skipped} 行跨文件重复商品，数量未重复计算。`] : draft.warnings }); }}>应用映射并导入</button><button disabled={frozen} onClick={() => change({ ...draft, pending: draft.pending.filter(t => t.id !== table.id) })}>排除此表格</button><button disabled={frozen} onClick={() => change({ ...draft, pending: draft.pending.map(t => t.id === table.id ? { ...t, mapping: detectMapping(Object.keys(t.records[0])) } : t) })}>重置映射</button></div>
       </section>)}
       {draft.screenshots.length > 0 && <section className="bw-card"><h3>截图录入</h3>{draft.screenshots.map(s => <div className="bw-file" key={s.id}><span>{draft.assets.find(a => a.id === s.assetId)?.name} · {s.reviewed ? '已处理' : '需核对录入'}</span><button disabled={frozen} onClick={() => { setSelectedScreenshot(s.id); setEditor({ ...emptyLine(), ...screenshotPrefill(s.text) }); setStep(1); }}>查看并录入</button></div>)}</section>}
       {draft.warnings.length > 0 && <section className="bw-card"><details open><summary>导入记录与提示（{draft.warnings.length}）</summary><ul>{draft.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul></details></section>}

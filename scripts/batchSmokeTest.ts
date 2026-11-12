@@ -137,3 +137,13 @@ const { labelStripText } = await import('../src/lib/labelStrip');
 assert.equal(labelStripText(line('bal', { product: 'Balcony Privacy Screen', color: '黄色', size: '2‘6“x 140”' }), 1), 'Yellow 2′6″ x 140″ bal');
 assert.equal(labelStripText(line('bal', { product: 'Balcony Privacy Screen', color: '黄色', size: '2ft6in x 140in' }), 1), 'Yellow 2′6″ x 140″ bal');
 assert.equal(labelStripText(line('bal', { product: 'Balcony Privacy Screen', color: '黄色', size: '3 x 10' }), 1), 'Yellow 3 x 10 bal');
+
+const { mergeImportedLines } = await import('../src/lib/batchImport');
+const reportLine = { ...line('report-a:row:0'), importItemId: 'item-1' };
+const repeatLine = { ...reportLine, id: 'report-b:row:0', status: 'Shipped', itemStatus: 'Shipped' };
+assert.equal(mergeImportedLines([reportLine], [repeatLine]).skipped, 1);
+assert.equal(mergeImportedLines([reportLine], [{ ...repeatLine, qty: 3 }]).skipped, 0);
+assert.equal(mergeImportedLines([reportLine], [{ ...repeatLine, size: '10 X 20' }]).skipped, 0);
+assert.equal(mergeImportedLines([reportLine], [{ ...repeatLine, importItemId: 'item-2' }]).skipped, 0);
+assert.equal(mergeImportedLines([], [reportLine, repeatLine]).lines.length, 2);
+assert.equal(mergeImportedLines([reportLine], [{ ...repeatLine, status: 'Cancelled' }]).skipped, 0);
