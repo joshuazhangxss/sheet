@@ -2,10 +2,7 @@ import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 import type { LabelPage, LabelParseResult } from '../types';
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/legacy/build/pdf.worker.mjs',
-  import.meta.url,
-).toString();
+pdfjs.GlobalWorkerOptions.workerSrc = `/pdfjs/worker-${pdfjs.version}.mjs`;
 
 function normalizeLabelText(value: string): string {
   return value

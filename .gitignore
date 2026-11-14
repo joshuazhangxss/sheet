@@ -31,3 +31,6 @@ playwright-report/
 # Local generated documents and customer-data diagnostics
 output/
 tmp/
+
+# Generated from the installed PDF.js version by Vite
+/public/pdfjs/
