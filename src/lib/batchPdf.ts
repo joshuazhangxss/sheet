@@ -43,36 +43,9 @@ export async function orderedLabelsPdf(batch: ReleasedBatch, assets: Asset[], se
       const fontFor = (char: string) => char.charCodeAt(0) < 128 || char === '×' ? boldStripFont! : stripFont!;
       const charSize = (char: string, size: number) => char === '★' ? size * 1.4 : size;
       const measure = (text: string, size: number) => [...text].reduce((width, char) => width + fontFor(char).widthOfTextAtSize(char, charSize(char, size)), 0);
-      const wrapStrip = (text: string, size: number) => {
-        const rows: string[] = []; let current = '';
-        for (const char of text) {
-          if (current && measure(current + char, size) > pageWidth - margin * 2) { rows.push(current); current = ''; }
-          current += char;
-        }
-        if (current) rows.push(current);
-        return rows;
-      };
-      // Prefer one line; wrap between complete items before reducing type size.
-      let fontSize = 11;
-      const pack = (size: number) => {
-        const rows: string[] = [];
-        let current = '';
-        for (const item of items) {
-          const combined = current ? `${current} | ${item}` : item;
-          if (measure(combined, size) <= pageWidth - margin * 2) current = combined;
-          else {
-            if (current) rows.push(current);
-            const parts = wrapStrip(item, size);
-            rows.push(...parts.slice(0, -1)); current = parts.at(-1) || '';
-          }
-        }
-        if (current) rows.push(current);
-        return rows;
-      };
-      let texts = pack(fontSize);
-      while (texts.length > 2 && fontSize > 9) { fontSize -= 0.5; texts = pack(fontSize); }
-      const stripHeight = texts.length * (fontSize * 1.4 + 3) + 13;
-      if (stripHeight > 70) throw new Error('此订单商品太多，无法在信息条内清晰排版。请使用原始标签和顺序对照单。');
+      // Keep every item on one line; fit by font size, never wrap or truncate.
+      const texts = [items.join(' | ').replace(/[\r\n\t]+/g, ' ')];
+      const stripHeight = 31.4;
       // Fill the already-reserved strip, without shrinking the shipping label further.
       const rowMetrics = (text: string, size: number) => {
         let ascent = 0, descent = 0;
@@ -87,8 +60,9 @@ export async function orderedLabelsPdf(batch: ReleasedBatch, assets: Asset[], se
       const textHeight = (size: number) => texts.reduce((height, text) => {
         const row = rowMetrics(text, size); return height + row.ascent + row.descent;
       }, 0) + Math.max(0, texts.length - 1) * 2;
-      while (fontSize + 0.5 <= 32 && textHeight(fontSize + 0.5) <= stripHeight - 6
-        && texts.every(text => measure(text, fontSize + 0.5) <= pageWidth - margin * 2)) fontSize += 0.5;
+      const fontSize = Math.min(32,
+        (pageWidth - margin * 2) / Math.max(measure(texts[0], 1), 0.001),
+        (stripHeight - 6) / Math.max(textHeight(1), 0.001));
 
       const target = output.addPage([pageWidth, pageHeight]);
       const availableHeight = pageHeight - stripHeight - margin * 2;

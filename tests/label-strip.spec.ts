@@ -24,11 +24,14 @@ for (const paper of ['4x6', '100x150', 'short'] as const) test(`detachable strip
     const renderer=await import(/* @vite-ignore */ rendererPath);
     renderer.GlobalWorkerOptions.workerSrc='/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs';
     const rendered=await renderer.getDocument({data:new Uint8Array(bytes)}).promise;
-    const first=await rendered.getPage(1);const text=(await first.getTextContent()).items.map((i:{str?:string})=>i.str||'').join(' ').replace(/\s+/g, ' ');
+    const first=await rendered.getPage(1);const content=(await first.getTextContent()).items;const stripItems=content.filter((i:{str?:string;transform:number[]})=>i.str?.trim() && i.transform[5]>390);const baselines=[...new Set(stripItems.map((i:{transform:number[]})=>Math.round(i.transform[5]*100)/100))];const bounds=stripItems.map((i:{transform:number[];width:number})=>({left:i.transform[4],right:i.transform[4]+i.width}));const text=content.map((i:{str?:string})=>i.str||'').join(' ').replace(/\s+/g, ' ');
     const canvas=document.createElement('canvas');const viewport=first.getViewport({scale:2});canvas.width=viewport.width;canvas.height=viewport.height;
     await first.render({canvas,viewport}).promise;document.body.replaceChildren(canvas);
-    return {bytes:[...bytes],text,size:pdf.getPage(0).getSize(),count:pdf.getPageCount()};
+    return {bytes:[...bytes],text,baselines,bounds,size:pdf.getPage(0).getSize(),count:pdf.getPageCount()};
   }, paper);
+  expect(result.baselines).toHaveLength(1);
+  expect(result.bounds.length).toBeGreaterThan(0);
+  expect(result.bounds.every(b => b.left >= 6.9 && b.right <= result.size.width - 6.9)).toBe(true);
   expect(result.count).toBe(1);expect(result.size.width).toBeCloseTo(paper !== '100x150' ? 288 : 100*72/25.4);expect(result.size.height).toBeCloseTo(paper !== '100x150' ? 432 : 150*72/25.4);
   if (paper === 'short') expect(result.text).toContain('Brown 5x8 z');
   else { expect(result.text).toContain('Yellow 7x7 z+k ★');expect(result.text.replace(/\s/g, '')).toContain('Yellow2′6″x140″bal');} expect(result.text).toContain('ORIGINAL SHIPPING LABEL');
