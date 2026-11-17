@@ -155,3 +155,6 @@ const canceledTable = { id: 'cancel-test', name: 'orders', mapping: { orderId:'o
   { order:'BAD', product:'Fence', qty:'', status:'' },
 ] };
 assert.deepEqual(tableToLines(canceledTable).map(l => l.excluded), [true, false, true, false]);
+
+assert.equal(labelStripText(line('quantity-strip', { product: 'Shade sail', color: '黄色', size: '7 X 7' }), 2), 'Yellow 7x7 =2');
+assert.equal(labelStripText(line('quantity-strip', { product: 'Straight edge with grommets', color: '黄色', size: '7 X 7' }), 3), 'Yellow 7x7 z+k =3');
