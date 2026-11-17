@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-for (const paper of ['4x6', '100x150'] as const) test(`detachable strip fits ${paper} paper and prints all allocated items`, async ({ page }, testInfo) => {
+for (const paper of ['4x6', '100x150', 'short'] as const) test(`detachable strip fits ${paper} paper and prints all allocated items`, async ({ page }, testInfo) => {
   await page.goto('/');
   const result = await page.evaluate(async paper => {
     const pdfPath = '/node_modules/.vite/deps/pdf-lib.js';
@@ -16,8 +16,9 @@ for (const paper of ['4x6', '100x150'] as const) test(`detachable strip fits ${p
       {...emptyLine(),id:'b',color:'黄色',size:'7’ X 7’',product:'Shade sail'},
       {...emptyLine(),id:'c',color:'黄色',size:'2‘6“ X 140”',product:'Privacy fence'},
     ];
+    if (paper === 'short') lines.splice(0, lines.length, {...emptyLine(), id:'short',color:'棕色',size:'5 X 8',product:'Straight edge sail'});
     const batch = {lines,shipments:[{label:{assetId:'pdf',pageNumber:1},allocations:(paper === '100x150' ? [...lines, ...lines] : lines).map(l=>({lineId:l.id,qty:1}))}]};
-    const bytes = await orderedLabelsPdf(batch,[{id:'pdf',file:new Blob([await source.save()])}],undefined,true,paper);
+    const bytes = await orderedLabelsPdf(batch,[{id:'pdf',file:new Blob([await source.save()])}],undefined,true,paper === 'short' ? '4x6' : paper);
     const pdf = await PDFDocument.load(bytes);
     const rendererPath='/node_modules/pdfjs-dist/legacy/build/pdf.mjs';
     const renderer=await import(/* @vite-ignore */ rendererPath);
@@ -28,8 +29,9 @@ for (const paper of ['4x6', '100x150'] as const) test(`detachable strip fits ${p
     await first.render({canvas,viewport}).promise;document.body.replaceChildren(canvas);
     return {bytes:[...bytes],text,size:pdf.getPage(0).getSize(),count:pdf.getPageCount()};
   }, paper);
-  expect(result.count).toBe(1);expect(result.size.width).toBeCloseTo(paper === '4x6' ? 288 : 100*72/25.4);expect(result.size.height).toBeCloseTo(paper === '4x6' ? 432 : 150*72/25.4);
-  expect(result.text).toContain('Yellow 7x7 z+k ★');expect(result.text.replace(/\s/g, '')).toContain('Yellow2′6″x140″bal');expect(result.text).toContain('ORIGINAL SHIPPING LABEL');
+  expect(result.count).toBe(1);expect(result.size.width).toBeCloseTo(paper !== '100x150' ? 288 : 100*72/25.4);expect(result.size.height).toBeCloseTo(paper !== '100x150' ? 432 : 150*72/25.4);
+  if (paper === 'short') expect(result.text).toContain('Brown 5x8 z');
+  else { expect(result.text).toContain('Yellow 7x7 z+k ★');expect(result.text.replace(/\s/g, '')).toContain('Yellow2′6″x140″bal');} expect(result.text).toContain('ORIGINAL SHIPPING LABEL');
   await writeFile(testInfo.outputPath('label-strip.pdf'),Buffer.from(result.bytes));
   await page.locator('canvas').screenshot({path:testInfo.outputPath('label-strip.png')});
 });

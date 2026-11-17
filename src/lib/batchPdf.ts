@@ -73,6 +73,23 @@ export async function orderedLabelsPdf(batch: ReleasedBatch, assets: Asset[], se
       while (texts.length > 2 && fontSize > 9) { fontSize -= 0.5; texts = pack(fontSize); }
       const stripHeight = texts.length * (fontSize * 1.4 + 3) + 13;
       if (stripHeight > 70) throw new Error('此订单商品太多，无法在信息条内清晰排版。请使用原始标签和顺序对照单。');
+      // Fill the already-reserved strip, without shrinking the shipping label further.
+      const rowMetrics = (text: string, size: number) => {
+        let ascent = 0, descent = 0;
+        for (const char of text) {
+          const font = fontFor(char), actualSize = charSize(char, size);
+          const top = font.heightAtSize(actualSize, { descender: false });
+          ascent = Math.max(ascent, top);
+          descent = Math.max(descent, font.heightAtSize(actualSize) - top);
+        }
+        return { ascent, descent };
+      };
+      const textHeight = (size: number) => texts.reduce((height, text) => {
+        const row = rowMetrics(text, size); return height + row.ascent + row.descent;
+      }, 0) + Math.max(0, texts.length - 1) * 2;
+      while (fontSize + 0.5 <= 32 && textHeight(fontSize + 0.5) <= stripHeight - 6
+        && texts.every(text => measure(text, fontSize + 0.5) <= pageWidth - margin * 2)) fontSize += 0.5;
+
       const target = output.addPage([pageWidth, pageHeight]);
       const availableHeight = pageHeight - stripHeight - margin * 2;
       const scale = Math.min((pageWidth - margin * 2) / width, availableHeight / height);
@@ -80,9 +97,12 @@ export async function orderedLabelsPdf(batch: ReleasedBatch, assets: Asset[], se
       target.drawPage(embedded, { x: (pageWidth - width * scale) / 2, y: margin, width: width * scale, height: height * scale });
       const cutY = pageHeight - margin - stripHeight;
       target.drawLine({ start: { x: margin, y: cutY }, end: { x: pageWidth - margin, y: cutY }, thickness: 0.5, dashArray: [3, 3], color: rgb(0.5, 0.5, 0.5) });
-      texts.forEach((text, i) => {
+      let rowTop = pageHeight - margin - (stripHeight - textHeight(fontSize)) / 2;
+      texts.forEach(text => {
         let x = margin;
-        const y = pageHeight - margin - fontSize * 1.4 - i * (fontSize * 1.4 + 3);
+        const metrics = rowMetrics(text, fontSize);
+        const y = rowTop - metrics.ascent;
+        rowTop = y - metrics.descent - 2;
         for (const char of text) {
           const font = fontFor(char), size = charSize(char, fontSize);
           target.drawText(char, { x, y, size, font });
