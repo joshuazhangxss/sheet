@@ -76,6 +76,8 @@ export function tableToLines(table: PendingTable): OrderLine[] {
     line.source = `${table.name} · 行 ${index + 2}`;
     // Never silently turn an absent, fractional, or malformed quantity into one.
     line.qty = /^\d+$/.test(get('qty')) ? Number(get('qty')) : 0;
+    // Explicit zero means no units to produce; malformed/missing quantities still require correction.
+    if (/^0+$/.test(get('qty')) || /cancelled|canceled|取消/i.test(`${line.itemStatus} ${line.status}`)) line.excluded = true;
     line.size ||= extractSize(line.product, line.sku);
     line.color ||= line.product.match(/棕色|米色|灰色|蓝色|黄色|绿色|黑色|白色|红色|橙色|紫色/)?.[0] || extractColor(line.product, line.sku);
     if (homa && line.size) line.size = extractSize(line.size, '') || line.size;

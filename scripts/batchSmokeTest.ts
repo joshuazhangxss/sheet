@@ -147,3 +147,11 @@ assert.equal(mergeImportedLines([reportLine], [{ ...repeatLine, size: '10 X 20' 
 assert.equal(mergeImportedLines([reportLine], [{ ...repeatLine, importItemId: 'item-2' }]).skipped, 0);
 assert.equal(mergeImportedLines([], [reportLine, repeatLine]).lines.length, 2);
 assert.equal(mergeImportedLines([reportLine], [{ ...repeatLine, status: 'Cancelled' }]).skipped, 0);
+
+const canceledTable = { id: 'cancel-test', name: 'orders', mapping: { orderId:'order', product:'product', qty:'qty', itemStatus:'status' }, records: [
+  { order:'SAME', product:'Fence', qty:'0', status:'' },
+  { order:'SAME', product:'Fence', qty:'1', status:'Shipped' },
+  { order:'OTHER', product:'Fence', qty:'2', status:'Cancelled' },
+  { order:'BAD', product:'Fence', qty:'', status:'' },
+] };
+assert.deepEqual(tableToLines(canceledTable).map(l => l.excluded), [true, false, true, false]);
